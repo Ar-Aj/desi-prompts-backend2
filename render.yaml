@@ -2,8 +2,8 @@ services:
   - type: web
     name: desi-prompts-backend
     env: node
-    buildCommand: pnpm install && pnpm run build
-    startCommand: pnpm start
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
