@@ -1,0 +1,106 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import path from 'path';
+import passport from './config/passport.config';
+
+// Load environment variables
+dotenv.config();
+
+// Import routes
+import authRoutes from './routes/auth.routes';
+import productRoutes from './routes/product.routes';
+import orderRoutes from './routes/order.routes';
+import reviewRoutes from './routes/review.routes';
+import supportRoutes from './routes/support.routes';
+import adminRoutes from './routes/admin.routes';
+import webhookRoutes from './routes/webhook.routes';
+
+// Import middleware
+import { errorHandler } from './middleware/error.middleware';
+
+const app: express.Application = express();
+const PORT = process.env.PORT || 5000;
+
+// Security middleware
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+// CORS configuration
+const corsOptions = {
+  origin: [
+    'http://localhost:5173', // Customer frontend
+    'http://localhost:5174', // Admin frontend
+    ...(process.env.CORS_ORIGINS || '').split(',').filter(Boolean)
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+app.use(cors(corsOptions));
+
+// No rate limiting - for better user experience and workflow
+
+// Webhook routes (before body parser for raw body)
+app.use('/api/webhooks', webhookRoutes);
+
+// Body parser middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Initialize passport
+app.use(passport.initialize());
+
+// Serve uploaded images
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+// API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Health check endpoint
+app.get('/health', (_req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
+});
+
+// Error handling middleware
+app.use(errorHandler);
+
+// Connect to MongoDB
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/indian-promptpack');
+    console.log('✅ MongoDB connected successfully');
+  } catch (error) {
+    console.error('❌ MongoDB connection error:', error);
+    console.warn('⚠️  Server will continue without database. Some features may not work.');
+  }
+};
+
+// Start server
+const startServer = async () => {
+  // Try to connect to MongoDB but don't fail if it's not available
+  await connectDB();
+  
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+    console.log(`🌐 Frontend URLs:`);
+    console.log(`   Customer: http://localhost:5173`);
+    console.log(`   Admin: http://localhost:5174`);
+  });
+};
+
+startServer().catch(console.error);
+
+export default app;
