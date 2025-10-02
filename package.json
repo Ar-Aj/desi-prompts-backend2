@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "prebuild": "echo Building TypeScript files...",
+    "test:build": "node test-build.js",
     "lint": "eslint src/",
     "test": "jest",
     "seed:admin": "tsx src/scripts/seedAdmin.ts"
