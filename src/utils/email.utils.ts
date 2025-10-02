@@ -1,7 +1,8 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
+import { env } from '../config/environment.config';
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resend = env.email.resendApiKey ? new Resend(env.email.resendApiKey) : null;
 
 // Fallback to nodemailer for development
 const transporter = nodemailer.createTransport({
@@ -25,7 +26,7 @@ export const sendEmail = async (options: EmailOptions) => {
     if (resend && process.env.NODE_ENV === 'production') {
       // Use Resend in production
       await resend.emails.send({
-        from: process.env.EMAIL_FROM!,
+        from: env.email.from!,
         to: options.to,
         subject: options.subject,
         html: options.html
@@ -33,7 +34,7 @@ export const sendEmail = async (options: EmailOptions) => {
     } else {
       // Use nodemailer in development
       await transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'noreply@indianpromptpack.com',
+        from: env.email.from || 'noreply@indianpromptpack.com',
         to: options.to,
         subject: options.subject,
         html: options.html,
@@ -155,7 +156,7 @@ export const getWelcomeEmail = (userName: string) => {
             <li>⭐ Ability to leave reviews and help others</li>
           </ul>
           <div style="text-align: center;">
-            <a href="${process.env.FRONTEND_ORIGIN}" class="cta-btn">Start Shopping</a>
+            <a href="${env.frontendUrl}" class="cta-btn">Start Shopping</a>
           </div>
           <p>Thank you for joining us!</p>
           <p>Best regards,<br>The Desi Prompts Team</p>

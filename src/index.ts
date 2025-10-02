@@ -1,13 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import path from 'path';
 import passport from './config/passport.config';
-
-// Load environment variables
-dotenv.config();
+import { env } from './config/environment.config';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
@@ -22,7 +19,7 @@ import webhookRoutes from './routes/webhook.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 const app: express.Application = express();
-const PORT = process.env.PORT || 5000;
+const PORT = env.port || 5000;
 
 // Security middleware
 app.use(helmet({
@@ -79,7 +76,7 @@ app.use(errorHandler);
 // Connect to MongoDB
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/indian-promptpack');
+    await mongoose.connect(env.mongoUri);
     console.log('✅ MongoDB connected successfully');
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);

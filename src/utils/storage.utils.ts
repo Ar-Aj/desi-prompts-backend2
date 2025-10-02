@@ -1,14 +1,15 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
+import { env } from '../config/environment.config';
 
 const s3Client = new S3Client({
-  region: process.env.S3_REGION || 'us-east-1',
+  region: env.s3.region,
   credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!
+    accessKeyId: env.s3.accessKeyId!,
+    secretAccessKey: env.s3.secretAccessKey!
   },
-  ...(process.env.S3_ENDPOINT && { endpoint: process.env.S3_ENDPOINT })
+  endpoint: env.s3.endpoint
 });
 
 export const uploadFile = async (
@@ -18,7 +19,7 @@ export const uploadFile = async (
 ): Promise<string> => {
   try {
     const command = new PutObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME!,
+      Bucket: env.s3.bucketName!,
       Key: key,
       Body: file,
       ContentType: contentType
@@ -40,7 +41,7 @@ export const getSignedDownloadUrl = async (
 ): Promise<string> => {
   try {
     const command = new GetObjectCommand({
-      Bucket: process.env.S3_BUCKET_NAME!,
+      Bucket: env.s3.bucketName!,
       Key: key
     });
 

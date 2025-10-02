@@ -1,13 +1,14 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
+import { env } from '../config/environment.config';
 
 // Initialize Razorpay only if keys are provided
 let razorpay: Razorpay | null = null;
 
-if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+if (env.razorpay?.keyId && env.razorpay?.keySecret) {
   razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
+    key_id: env.razorpay.keyId,
+    key_secret: env.razorpay.keySecret
   });
 } else {
   console.warn('Razorpay keys not configured. Payment functionality will be disabled.');
@@ -46,7 +47,7 @@ export const verifyRazorpaySignature = (
   try {
     const body = orderId + '|' + paymentId;
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+      .createHmac('sha256', env.razorpay?.keySecret!)
       .update(body.toString())
       .digest('hex');
 
@@ -63,7 +64,7 @@ export const verifyWebhookSignature = (
 ): boolean => {
   try {
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET!)
+      .createHmac('sha256', env.razorpay?.webhookSecret!)
       .update(body)
       .digest('hex');
 
