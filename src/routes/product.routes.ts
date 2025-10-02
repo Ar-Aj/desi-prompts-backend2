@@ -1,14 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { Product } from '../models/Product.model';
-import { Review } from '../models/Review.model';
 import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 
-const router = Router();
+const router: Router = Router();
 
 // Get all products (public)
-router.get('/', asyncHandler(async (req, res) => {
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const {
     category,
     search,
@@ -16,7 +15,7 @@ router.get('/', asyncHandler(async (req, res) => {
     maxPrice,
     page = 1,
     limit = 12
-  } = req.query;
+  } = _req.query;
 
   const query: any = { isActive: true };
 
@@ -59,7 +58,7 @@ router.get('/', asyncHandler(async (req, res) => {
 }));
 
 // Get all active demos (public) - Must be before /:slug route
-router.get('/demos', asyncHandler(async (req, res) => {
+router.get('/demos', asyncHandler(async (_req: Request, res: Response) => {
   const demos = await Demo.find({ isActive: true })
     .populate('product', 'name category price slug images description')
     .sort({ order: 1, createdAt: -1 });
@@ -71,14 +70,15 @@ router.get('/demos', asyncHandler(async (req, res) => {
 }));
 
 // Get single product (public)
-router.get('/:slug', asyncHandler(async (req, res) => {
+router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
   const product = await Product.findOne({ 
     slug: req.params.slug,
     isActive: true 
   }).select('-pdfUrl -pdfPassword');
 
   if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
+    res.status(404).json({ error: 'Product not found' });
+    return;
   }
 
   res.json({
@@ -88,7 +88,7 @@ router.get('/:slug', asyncHandler(async (req, res) => {
 }));
 
 // Create product (admin only)
-router.post('/', authenticate, authorizeAdmin, asyncHandler(async (req, res) => {
+router.post('/', authenticate, authorizeAdmin, asyncHandler(async (req: Request, res: Response) => {
   const product = new Product(req.body);
   await product.save();
 
@@ -99,7 +99,7 @@ router.post('/', authenticate, authorizeAdmin, asyncHandler(async (req, res) => 
 }));
 
 // Update product (admin only)
-router.put('/:id', authenticate, authorizeAdmin, asyncHandler(async (req, res) => {
+router.put('/:id', authenticate, authorizeAdmin, asyncHandler(async (req: Request, res: Response) => {
   const product = await Product.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -107,7 +107,8 @@ router.put('/:id', authenticate, authorizeAdmin, asyncHandler(async (req, res) =
   );
 
   if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
+    res.status(404).json({ error: 'Product not found' });
+    return;
   }
 
   res.json({
@@ -117,7 +118,7 @@ router.put('/:id', authenticate, authorizeAdmin, asyncHandler(async (req, res) =
 }));
 
 // Delete product (admin only)
-router.delete('/:id', authenticate, authorizeAdmin, asyncHandler(async (req, res) => {
+router.delete('/:id', authenticate, authorizeAdmin, asyncHandler(async (req: Request, res: Response) => {
   const product = await Product.findByIdAndUpdate(
     req.params.id,
     { isActive: false },
@@ -125,7 +126,8 @@ router.delete('/:id', authenticate, authorizeAdmin, asyncHandler(async (req, res
   );
 
   if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
+    res.status(404).json({ error: 'Product not found' });
+    return;
   }
 
   res.json({
@@ -135,7 +137,7 @@ router.delete('/:id', authenticate, authorizeAdmin, asyncHandler(async (req, res
 }));
 
 // Get featured products
-router.get('/featured/list', asyncHandler(async (req, res) => {
+router.get('/featured/list', asyncHandler(async (_req: Request, res: Response) => {
   const products = await Product.find({ isActive: true })
     .sort({ salesCount: -1, averageRating: -1 })
     .limit(8)
@@ -148,7 +150,7 @@ router.get('/featured/list', asyncHandler(async (req, res) => {
 }));
 
 // Get product categories
-router.get('/categories/list', asyncHandler(async (req, res) => {
+router.get('/categories/list', asyncHandler(async (_req: Request, res: Response) => {
   const categories = await Product.distinct('category', { isActive: true });
 
   res.json({
@@ -158,7 +160,7 @@ router.get('/categories/list', asyncHandler(async (req, res) => {
 }));
 
 // Get all products for admin (with order management)
-router.get('/admin/all', authenticate, authorizeAdmin, asyncHandler(async (req, res) => {
+router.get('/admin/all', authenticate, authorizeAdmin, asyncHandler(async (_req: Request, res: Response) => {
   const products = await Product.find({})
     .sort({ order: 1, createdAt: -1 })
     .select('name description price originalPrice category isActive salesCount averageRating order createdAt');
@@ -170,7 +172,7 @@ router.get('/admin/all', authenticate, authorizeAdmin, asyncHandler(async (req, 
 }));
 
 // Update multiple product orders
-router.put('/admin/reorder', authenticate, authorizeAdmin, asyncHandler(async (req, res) => {
+router.put('/admin/reorder', authenticate, authorizeAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { products } = req.body; // Array of { id, order }
   
   const updatePromises = products.map((product: any) => 

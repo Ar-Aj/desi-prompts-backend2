@@ -1,12 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 
-export const authorizeAdmin = (req: any, res: Response, next: NextFunction) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
+export const authorizeAdmin = (req: Request, res: Response, next: NextFunction): void => {
+  if (!(req as any).user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
   }
 
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+  if ((req as any).user.role !== 'admin') {
+    res.status(403).json({ error: 'Admin access required' });
+    return;
   }
 
   next();

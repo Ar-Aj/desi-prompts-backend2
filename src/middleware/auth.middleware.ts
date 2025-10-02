@@ -10,19 +10,21 @@ export const authenticate = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
-      return res.status(401).json({ error: 'Authentication required' });
+      res.status(401).json({ error: 'Authentication required' });
+      return;
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
     const user = await User.findById(decoded.userId).select('-password');
 
     if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+      res.status(401).json({ error: 'User not found' });
+      return;
     }
 
     req.user = user;
@@ -36,18 +38,19 @@ export const authorizeAdmin = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   if (req.user?.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+    res.status(403).json({ error: 'Admin access required' });
+    return;
   }
   next();
 };
 
 export const optionalAuth = async (
   req: AuthRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
 

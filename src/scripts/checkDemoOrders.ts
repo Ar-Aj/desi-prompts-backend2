@@ -1,6 +1,5 @@
 import mongoose from 'mongoose';
 import { Demo } from '../models/Demo.model';
-import { Product } from '../models/Product.model';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -24,7 +23,7 @@ async function checkDemoOrders() {
     if (demos.length === 0) {
       console.log('No active demos found');
     } else {
-      demos.forEach((demo, index) => {
+      demos.forEach((demo: any, index: number) => {
         console.log(`${index + 1}. Title: "${demo.title}"`);
         console.log(`   Order: ${demo.order}`);
         console.log(`   Product ID: ${demo.product}`);
@@ -34,12 +33,12 @@ async function checkDemoOrders() {
       });
 
       // Check if there's a demo with order 0
-      const orderZeroDemo = demos.find(demo => demo.order === 0);
+      const orderZeroDemo = demos.find((demo: any) => demo.order === 0);
       if (orderZeroDemo) {
         console.log('✅ Demo with order 0 found:', orderZeroDemo.title);
       } else {
         console.log('❌ No demo with order 0 found');
-        console.log('Available orders:', demos.map(d => d.order).join(', '));
+        console.log('Available orders:', demos.map((d: any) => d.order).join(', '));
       }
     }
 
@@ -51,4 +50,9 @@ async function checkDemoOrders() {
   }
 }
 
-checkDemoOrders();
+// Only run if this file is executed directly
+if (require.main === module) {
+  checkDemoOrders();
+}
+
+export { checkDemoOrders };

@@ -1,18 +1,18 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { Order } from '../models/Order.model';
 import { Product } from '../models/Product.model';
-import { User } from '../models/User.model';
 import { authenticate } from '../middleware/auth.middleware';
-import { asyncHandler } from '../middleware/asyncHandler.middleware';
+import { asyncHandler } from '../middleware/error.middleware';
 import crypto from 'crypto';
-import { checkFirstTimeDiscount, applyFirstTimeDiscount, markFirstTimeDiscountUsed } from '../utils/discount.utils';
+import { checkFirstTimeDiscount } from '../utils/discount.utils';
 import { sendEmail, getOrderConfirmationEmail } from '../utils/email.utils';
 import { getSignedDownloadUrl } from '../utils/storage.utils';
+import { createRazorpayOrder } from '../utils/payment.utils';
 
-const router = express.Router();
+const router: express.Router = express.Router();
 
 // Check first-time discount eligibility
-router.get('/check-discount', asyncHandler(async (req, res) => {
+router.get('/check-discount', asyncHandler(async (req: Request, res: Response) => {
   const userId = req.query.userId as string;
   const guestEmail = req.query.guestEmail as string;
 
@@ -32,15 +32,16 @@ router.get('/check-discount', asyncHandler(async (req, res) => {
 }));
 
 // Create order
-router.post('/create', asyncHandler(async (req: any, res) => {
+router.post('/create', asyncHandler(async (req: Request, res: Response) => {
   const { items, guestEmail, guestName } = req.body;
-  const userId = req.user?._id;
+  const userId = (req as any).user?._id;
 
   // Validate user or guest details
   if (!userId && (!guestEmail || !guestName)) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       error: 'Please provide guest details or login to continue' 
     });
+    return;
   }
 
   // Fetch products and calculate total
@@ -51,12 +52,13 @@ router.post('/create', asyncHandler(async (req: any, res) => {
   });
 
   if (products.length !== items.length) {
-    return res.status(400).json({ error: 'Some products are not available' });
+    res.status(400).json({ error: 'Some products are not available' });
+    return;
   }
 
   let totalAmount = 0;
   const orderItems = items.map((item: any) => {
-    const product = products.find(p => p._id.toString() === item.productId);
+    const product = products.find(p => (p._id as any).toString() === item.productId);
     if (!product) throw new Error('Product not found');
     
     totalAmount += product.price * item.quantity;
@@ -103,13 +105,14 @@ router.post('/create', asyncHandler(async (req: any, res) => {
 }));
 
 // Verify payment
-router.post('/verify-payment', asyncHandler(async (req: any, res) => {
+router.post('/verify-payment', asyncHandler(async (req: Request, res: Response) => {
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
   // Find order
   const order = await Order.findOne({ razorpayOrderId }).populate('items.product');
   if (!order) {
-    return res.status(404).json({ error: 'Order not found' });
+    res.status(404).json({ error: 'Order not found' });
+    return;
   }
 
   // Verify signature (simplified for now)
@@ -121,7 +124,8 @@ router.post('/verify-payment', asyncHandler(async (req: any, res) => {
   if (!isValid) {
     order.paymentStatus = 'failed';
     await order.save();
-    return res.status(400).json({ error: 'Payment verification failed' });
+    res.status(400).json({ error: 'Payment verification failed' });
+    return;
   }
 
   // Update order
@@ -152,8 +156,8 @@ router.post('/verify-payment', asyncHandler(async (req: any, res) => {
     if (firstProduct) {
       const downloadLink = await getSignedDownloadUrl(firstProduct.pdfUrl);
       
-      const customerEmail = order.guestEmail || req.user?.email;
-      const customerName = order.guestName || req.user?.name;
+      const customerEmail = order.guestEmail || (req as any).user?.email;
+      const customerName = order.guestName || (req as any).user?.name;
 
       await sendEmail({
         to: customerEmail,
@@ -161,7 +165,7 @@ router.post('/verify-payment', asyncHandler(async (req: any, res) => {
         html: getOrderConfirmationEmail(
           customerName,
           order.orderNumber,
-          order.purchaseId,
+          (order._id as any).toString(),
           products,
           order.totalAmount,
           firstProduct.pdfPassword,
@@ -191,17 +195,17 @@ router.post('/verify-payment', asyncHandler(async (req: any, res) => {
 }));
 
 // Get user orders
-router.get('/my-orders', authenticate, asyncHandler(async (req: any, res) => {
+router.get('/my-orders', authenticate, asyncHandler(async (req: Request, res: Response) => {
   const { page = 1, limit = 10 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
   const [orders, total] = await Promise.all([
-    Order.find({ user: req.user._id })
+    Order.find({ user: (req as any).user._id })
       .populate('items.product', 'name slug images')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit)),
-    Order.countDocuments({ user: req.user._id })
+    Order.countDocuments({ user: (req as any).user._id })
   ]);
 
   res.json({
@@ -217,21 +221,23 @@ router.get('/my-orders', authenticate, asyncHandler(async (req: any, res) => {
 }));
 
 // Get order by ID
-router.get('/:id', asyncHandler(async (req: any, res) => {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const order = await Order.findById(req.params.id)
     .populate('items.product', 'name slug images');
 
   if (!order) {
-    return res.status(404).json({ error: 'Order not found' });
+    res.status(404).json({ error: 'Order not found' });
+    return;
   }
 
   // Check authorization
   const isAuthorized = 
-    (order.user && order.user.toString() === req.user?._id?.toString()) ||
+    (order.user && order.user.toString() === (req as any).user?._id?.toString()) ||
     (order.guestEmail && req.body.guestEmail === order.guestEmail);
 
-  if (!isAuthorized && req.user?.role !== 'admin') {
-    return res.status(403).json({ error: 'Unauthorized' });
+  if (!isAuthorized && (req as any).user?.role !== 'admin') {
+    res.status(403).json({ error: 'Unauthorized' });
+    return;
   }
 
   res.json({
@@ -241,12 +247,13 @@ router.get('/:id', asyncHandler(async (req: any, res) => {
 }));
 
 // Get download link for purchased product
-router.get('/:orderId/download/:productId', asyncHandler(async (req: any, res) => {
+router.get('/:orderId/download/:productId', asyncHandler(async (req: Request, res: Response) => {
   const { orderId, productId } = req.params;
 
   const order = await Order.findById(orderId);
   if (!order || order.paymentStatus !== 'completed') {
-    return res.status(404).json({ error: 'Order not found or payment not completed' });
+    res.status(404).json({ error: 'Order not found or payment not completed' });
+    return;
   }
 
   // Check if product is in order
@@ -254,21 +261,24 @@ router.get('/:orderId/download/:productId', asyncHandler(async (req: any, res) =
     item.product.toString() === productId
   );
   if (!orderItem) {
-    return res.status(404).json({ error: 'Product not found in order' });
+    res.status(404).json({ error: 'Product not found in order' });
+    return;
   }
 
   // Check authorization
   const isAuthorized = 
-    (order.user && order.user.toString() === req.user?._id?.toString()) ||
+    (order.user && order.user.toString() === (req as any).user?._id?.toString()) ||
     (order.guestEmail && req.body.guestEmail === order.guestEmail);
 
   if (!isAuthorized) {
-    return res.status(403).json({ error: 'Unauthorized' });
+    res.status(403).json({ error: 'Unauthorized' });
+    return;
   }
 
   const product = await Product.findById(productId);
   if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
+    res.status(404).json({ error: 'Product not found' });
+    return;
   }
 
   const downloadUrl = await getSignedDownloadUrl(product.pdfUrl);

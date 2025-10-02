@@ -16,10 +16,10 @@ export class AppError extends Error {
 
 export const errorHandler = (
   err: Error | AppError | ZodError,
-  req: Request,
+  _req: Request,
   res: Response,
-  next: NextFunction
-) => {
+  _next: NextFunction
+): void => {
   let statusCode = 500;
   let message = 'Internal Server Error';
   let errors: any = undefined;
@@ -34,17 +34,17 @@ export const errorHandler = (
       field: e.path.join('.'),
       message: e.message
     }));
-  } else if (err.name === 'ValidationError') {
+  } else if ((err as any).name === 'ValidationError') {
     statusCode = 400;
     message = 'Validation Error';
     errors = Object.values((err as any).errors).map((e: any) => ({
       field: e.path,
       message: e.message
     }));
-  } else if (err.name === 'CastError') {
+  } else if ((err as any).name === 'CastError') {
     statusCode = 400;
     message = 'Invalid ID format';
-  } else if (err.name === 'MongoServerError' && (err as any).code === 11000) {
+  } else if ((err as any).name === 'MongoServerError' && (err as any).code === 11000) {
     statusCode = 400;
     message = 'Duplicate field value';
     const field = Object.keys((err as any).keyValue)[0];

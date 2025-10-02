@@ -6,7 +6,7 @@ import { optionalAuth, authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { createReviewSchema } from '../validators/review.validators';
 
-const router = Router();
+const router: Router = Router();
 
 // Check if user has purchased a product (for review eligibility)
 router.get('/purchase-verification/:productId', authenticate, asyncHandler(async (req: Request, res: Response) => {
@@ -43,7 +43,7 @@ router.get('/purchase-verification/:productId', authenticate, asyncHandler(async
 }));
 
 // Get reviews for a product
-router.get('/product/:productId', asyncHandler(async (req, res) => {
+router.get('/product/:productId', asyncHandler(async (req: Request, res: Response) => {
   const { productId } = req.params;
   const { page = 1, limit = 10, sortBy = 'createdAt' } = req.query;
   
@@ -71,14 +71,15 @@ router.get('/product/:productId', asyncHandler(async (req, res) => {
 }));
 
 // Create review (verified purchase only)
-router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async (req: any, res) => {
+router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const { productId, orderId, rating, title, comment } = req.body;
-  const userId = req.user?._id;
+  const userId = (req as any).user?._id;
 
   // Verify order exists and is completed
   const order = await Order.findById(orderId);
   if (!order || order.paymentStatus !== 'completed') {
-    return res.status(400).json({ error: 'Invalid order or payment not completed' });
+    res.status(400).json({ error: 'Invalid order or payment not completed' });
+    return;
   }
 
   // Verify product is in order
@@ -86,7 +87,8 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     item.product.toString() === productId
   );
   if (!orderItem) {
-    return res.status(400).json({ error: 'Product not found in order' });
+    res.status(400).json({ error: 'Product not found in order' });
+    return;
   }
 
   // Verify user/guest owns the order
@@ -95,7 +97,8 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     (!userId && order.guestEmail === req.body.guestEmail);
   
   if (!isOwner) {
-    return res.status(403).json({ error: 'You can only review products you purchased' });
+    res.status(403).json({ error: 'You can only review products you purchased' });
+    return;
   }
 
   // Check if review already exists
@@ -104,7 +107,8 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     order: orderId
   });
   if (existingReview) {
-    return res.status(400).json({ error: 'You have already reviewed this product' });
+    res.status(400).json({ error: 'You have already reviewed this product' });
+    return;
   }
 
   // Create review
@@ -129,14 +133,15 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
 }));
 
 // Mark review as helpful (requires authentication)
-router.post('/:reviewId/helpful', authenticate, asyncHandler(async (req, res) => {
+router.post('/:reviewId/helpful', authenticate, asyncHandler(async (req: Request, res: Response) => {
   const { reviewId } = req.params;
   const { helpful } = req.body;
   const userId = (req as any).user._id;
 
   const review = await Review.findById(reviewId);
   if (!review) {
-    return res.status(404).json({ error: 'Review not found' });
+    res.status(404).json({ error: 'Review not found' });
+    return;
   }
 
   // Check if user already voted
@@ -144,10 +149,11 @@ router.post('/:reviewId/helpful', authenticate, asyncHandler(async (req, res) =>
   const hasVotedNotHelpful = review.notHelpfulVotes.includes(userId);
 
   if (hasVotedHelpful || hasVotedNotHelpful) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       error: 'You have already voted on this review',
       message: 'Each user can only vote once per review'
     });
+    return;
   }
 
   // Add vote and update counts
@@ -175,7 +181,7 @@ router.post('/:reviewId/helpful', authenticate, asyncHandler(async (req, res) =>
 }));
 
 // Get review statistics for a product
-router.get('/product/:productId/stats', asyncHandler(async (req, res) => {
+router.get('/product/:productId/stats', asyncHandler(async (req: Request, res: Response) => {
   const { productId } = req.params;
 
   const stats = await Review.aggregate([

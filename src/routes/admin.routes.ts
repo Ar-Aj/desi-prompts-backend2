@@ -12,11 +12,11 @@ import { authenticate } from '../middleware/auth.middleware';
 import { authorizeAdmin } from '../middleware/admin.middleware';
 import { asyncHandler } from '../middleware/asyncHandler.middleware';
 
-const router = express.Router();
+const router: express.Router = express.Router();
 
 // Configure multer for image uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_req, _file, cb) => {
     const uploadDir = path.join(process.cwd(), 'uploads', 'images');
     // Create directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {
@@ -24,9 +24,9 @@ const storage = multer.diskStorage({
     }
     cb(null, uploadDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, _file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+    cb(null, `${uniqueSuffix}${path.extname(_file.originalname)}`);
   }
 });
 
@@ -38,10 +38,10 @@ const upload = multer({
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (_req, _file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const extname = allowedTypes.test(path.extname(_file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(_file.mimetype);
 
     if (mimetype && extname) {
       return cb(null, true);
@@ -57,8 +57,8 @@ const pdfUpload = multer({
   limits: {
     fileSize: 50 * 1024 * 1024 // 50MB limit for PDFs
   },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+  fileFilter: (_req, _file, cb) => {
+    if (_file.mimetype === 'application/pdf') {
       return cb(null, true);
     } else {
       cb(new Error('Only PDF files are allowed!'));
@@ -71,12 +71,13 @@ router.use(authenticate);
 router.use(authorizeAdmin);
 
 // Image upload endpoint
-router.post('/upload-image', upload.single('image'), asyncHandler(async (req: any, res: any) => {
+router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       error: 'No image file provided'
     });
+    return;
   }
 
   const imageUrl = `/uploads/images/${req.file.filename}`;
@@ -89,12 +90,13 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: an
 }));
 
 // PDF upload endpoint for S3
-router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: any, res: any) => {
+router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       error: 'No PDF file provided'
     });
+    return;
   }
 
   try {
@@ -122,7 +124,7 @@ router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: any
 }));
 
 // Get admin stats
-router.get('/stats', asyncHandler(async (req: any, res: any) => {
+router.get('/stats', asyncHandler(async (_req: Request, _res: Response) => {
   const [
     totalUsers,
     totalOrders,
@@ -183,7 +185,7 @@ router.get('/stats', asyncHandler(async (req: any, res: any) => {
     ])
   ]);
 
-  res.json({
+  _res.json({
     success: true,
     stats: {
       totalUsers,
@@ -203,25 +205,17 @@ router.get('/stats', asyncHandler(async (req: any, res: any) => {
 }));
 
 // Get all users
-router.get('/users', asyncHandler(async (req: any, res: any) => {
-  const { page = 1, limit = 20, search } = req.query;
+router.get('/users', asyncHandler(async (req: Request, res: Response) => {
+  const { page = 1, limit = 20 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
-  const query: any = { role: 'customer' };
-  if (search) {
-    query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } }
-    ];
-  }
-
   const [users, total] = await Promise.all([
-    User.find(query)
+    User.find({ role: 'customer' })
       .select('-password')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit)),
-    User.countDocuments(query)
+    User.countDocuments({ role: 'customer' })
   ]);
 
   res.json({
@@ -411,27 +405,20 @@ router.get('/orders/export', asyncHandler(async (req: any, res: any) => {
 }));
 
 // Get all support tickets
-router.get('/support-tickets', asyncHandler(async (req: any, res: any) => {
-  const { 
-    page = 1, 
-    limit = 20,
-    status,
-    priority,
-    ticketType
-  } = req.query;
-  
+router.get('/support/tickets', asyncHandler(async (req: Request, res: Response) => {
+  const { page = 1, limit = 20, status } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
-  const query: any = {};
 
-  if (status) query.status = status;
-  if (priority) query.priority = priority;
-  if (ticketType) query.ticketType = ticketType;
+  const query: any = {};
+  if (status && status !== 'all') {
+    query.status = status;
+  }
 
   const [tickets, total] = await Promise.all([
     SupportTicket.find(query)
       .populate('user', 'name email')
       .populate('order', 'orderNumber')
-      .sort({ priority: -1, createdAt: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit)),
     SupportTicket.countDocuments(query)
@@ -449,8 +436,31 @@ router.get('/support-tickets', asyncHandler(async (req: any, res: any) => {
   });
 }));
 
+// Update ticket status
+router.patch('/support/tickets/:ticketId/status', asyncHandler(async (req: Request, res: Response) => {
+  const { ticketId } = req.params;
+  const { status } = req.body;
+
+  const ticket = await SupportTicket.findByIdAndUpdate(
+    ticketId,
+    { status },
+    { new: true }
+  ).populate('user', 'name email')
+   .populate('order', 'orderNumber');
+
+  if (!ticket) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
+
+  res.json({
+    success: true,
+    ticket
+  });
+}));
+
 // Get product analytics
-router.get('/products/analytics', asyncHandler(async (req, res) => {
+router.get('/products/analytics', asyncHandler(async (_req: Request, res: Response) => {
   const analytics = await Product.aggregate([
     { $match: { isActive: true } },
     {
@@ -492,7 +502,7 @@ router.get('/products/analytics', asyncHandler(async (req, res) => {
 }));
 
 // Get all reviews (including fake ones for admin)
-router.get('/reviews', asyncHandler(async (req, res) => {
+router.get('/reviews', asyncHandler(async (req: Request, res: Response) => {
   const { page = 1, limit = 20 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -527,20 +537,22 @@ router.post('/reviews/fake', asyncHandler(async (req: Request, res: Response) =>
     rating,
     title,
     comment,
-    isVerifiedPurchase = true // Always true for fake reviews to show "Verified Purchase"
+    isVerifiedPurchase: _isVerifiedPurchase = true // Always true for fake reviews to show "Verified Purchase"
   } = req.body;
 
   // Validate required fields
   if (!product || !fakeReviewerName || !rating || !title || !comment) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       error: 'Missing required fields: product, fakeReviewerName, rating, title, comment' 
     });
+    return;
   }
 
   // Check if product exists
   const productExists = await Product.findById(product);
   if (!productExists) {
-    return res.status(404).json({ error: 'Product not found' });
+    res.status(404).json({ error: 'Product not found' });
+    return;
   }
 
   // Create fake order first (to support verified purchase)
@@ -596,7 +608,7 @@ router.post('/reviews/fake', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 // Get review moderation queue
-router.get('/reviews/moderation', asyncHandler(async (req, res) => {
+router.get('/reviews/moderation', asyncHandler(async (req: Request, res: Response) => {
   const { page = 1, limit = 20 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -624,10 +636,11 @@ router.get('/reviews/moderation', asyncHandler(async (req, res) => {
 }));
 
 // Toggle review status
-router.patch('/reviews/:reviewId/toggle', asyncHandler(async (req, res) => {
+router.patch('/reviews/:reviewId/toggle', asyncHandler(async (req: Request, res: Response) => {
   const review = await Review.findById(req.params.reviewId);
   if (!review) {
-    return res.status(404).json({ error: 'Review not found' });
+    res.status(404).json({ error: 'Review not found' });
+    return;
   }
 
   review.isActive = !review.isActive;
@@ -641,7 +654,7 @@ router.patch('/reviews/:reviewId/toggle', asyncHandler(async (req, res) => {
 }));
 
 // Update review fake helpful counts (Admin only)
-router.patch('/reviews/:reviewId/update-fake-helpful', asyncHandler(async (req, res) => {
+router.patch('/reviews/:reviewId/update-fake-helpful', asyncHandler(async (req: Request, res: Response) => {
   const { reviewId } = req.params;
   const { fakeHelpful, fakeNotHelpful } = req.body;
 
@@ -653,27 +666,16 @@ router.patch('/reviews/:reviewId/update-fake-helpful', asyncHandler(async (req, 
     reviewId,
     updateData,
     { new: true }
-  ).populate('product', 'name');
+  );
 
   if (!review) {
-    return res.status(404).json({ error: 'Review not found' });
+    res.status(404).json({ error: 'Review not found' });
+    return;
   }
-
-  // Save to trigger pre-save middleware that calculates totals
-  await review.save();
 
   res.json({
     success: true,
-    message: 'Review fake helpful counts updated successfully',
-    review: {
-      _id: review._id,
-      helpful: review.helpful,
-      notHelpful: review.notHelpful,
-      fakeHelpful: review.fakeHelpful,
-      fakeNotHelpful: review.fakeNotHelpful,
-      realHelpful: review.realHelpful,
-      realNotHelpful: review.realNotHelpful
-    }
+    review
   });
 }));
 
@@ -687,15 +689,17 @@ router.post('/orders/fake', asyncHandler(async (req: Request, res: Response) => 
 
   // Validate required fields
   if (!product || !fakeCustomerName) {
-    return res.status(400).json({ 
+    res.status(400).json({ 
       error: 'Missing required fields: product, fakeCustomerName' 
     });
+    return;
   }
 
   // Check if product exists
   const productExists = await Product.findById(product);
   if (!productExists) {
-    return res.status(404).json({ error: 'Product not found' });
+    res.status(404).json({ error: 'Product not found' });
+    return;
   }
 
   // Create fake order
@@ -736,7 +740,7 @@ router.post('/orders/fake', asyncHandler(async (req: Request, res: Response) => 
 }));
 
 // Get detailed product metrics with fake vs real data
-router.get('/products/metrics', asyncHandler(async (req, res) => {
+router.get('/products/metrics', asyncHandler(async (_req: Request, res: Response) => {
   const metrics = await Product.aggregate([
     {
       $lookup: {
@@ -897,7 +901,7 @@ router.get('/products/metrics', asyncHandler(async (req, res) => {
 // DEMO MANAGEMENT ROUTES
 
 // Get all demos
-router.get('/demos', asyncHandler(async (req, res) => {
+router.get('/demos', asyncHandler(async (req: Request, res: Response) => {
   const { page = 1, limit = 20 } = req.query;
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -923,7 +927,7 @@ router.get('/demos', asyncHandler(async (req, res) => {
 }));
 
 // Create demo
-router.post('/demos', asyncHandler(async (req, res) => {
+router.post('/demos', asyncHandler(async (req: Request, res: Response) => {
   const {
     title,
     description,
@@ -935,25 +939,28 @@ router.post('/demos', asyncHandler(async (req, res) => {
 
   // Validate required fields
   if (!title || !description || !product || !beforeImage || !afterImages || !Array.isArray(afterImages) || afterImages.length === 0) {
-    return res.status(400).json({
+    res.status(400).json({
       error: 'Missing required fields: title, description, product, beforeImage, afterImages (array with at least one image and prompt info)'
     });
+    return;
   }
 
   // Validate each after image has required prompt info
   for (let i = 0; i < afterImages.length; i++) {
     const afterImage = afterImages[i];
     if (!afterImage.image || !afterImage.promptName || !afterImage.promptDescription) {
-      return res.status(400).json({
+      res.status(400).json({
         error: `After image ${i + 1} is missing required fields: image, promptName, or promptDescription`
       });
+      return;
     }
   }
 
   // Check if product exists
   const productExists = await Product.findById(product);
   if (!productExists) {
-    return res.status(404).json({ error: 'Product not found' });
+    res.status(404).json({ error: 'Product not found' });
+    return;
   }
 
   // Create demo
@@ -980,7 +987,7 @@ router.post('/demos', asyncHandler(async (req, res) => {
 }));
 
 // Update demo
-router.put('/demos/:demoId', asyncHandler(async (req, res) => {
+router.put('/demos/:demoId', asyncHandler(async (req: Request, res: Response) => {
   const { demoId } = req.params;
   const {
     title,
@@ -994,14 +1001,16 @@ router.put('/demos/:demoId', asyncHandler(async (req, res) => {
 
   const demo = await Demo.findById(demoId);
   if (!demo) {
-    return res.status(404).json({ error: 'Demo not found' });
+    res.status(404).json({ error: 'Demo not found' });
+    return;
   }
 
   // If product is being changed, validate it exists
   if (product && product !== demo.product.toString()) {
     const productExists = await Product.findById(product);
     if (!productExists) {
-      return res.status(404).json({ error: 'Product not found' });
+      res.status(404).json({ error: 'Product not found' });
+      return;
     }
   }
 
@@ -1025,12 +1034,13 @@ router.put('/demos/:demoId', asyncHandler(async (req, res) => {
 }));
 
 // Delete demo
-router.delete('/demos/:demoId', asyncHandler(async (req, res) => {
+router.delete('/demos/:demoId', asyncHandler(async (req: Request, res: Response) => {
   const { demoId } = req.params;
 
   const demo = await Demo.findById(demoId);
   if (!demo) {
-    return res.status(404).json({ error: 'Demo not found' });
+    res.status(404).json({ error: 'Demo not found' });
+    return;
   }
 
   await Demo.findByIdAndDelete(demoId);
@@ -1042,10 +1052,11 @@ router.delete('/demos/:demoId', asyncHandler(async (req, res) => {
 }));
 
 // Toggle demo status
-router.patch('/demos/:demoId/toggle', asyncHandler(async (req, res) => {
+router.patch('/demos/:demoId/toggle', asyncHandler(async (req: Request, res: Response) => {
   const demo = await Demo.findById(req.params.demoId);
   if (!demo) {
-    return res.status(404).json({ error: 'Demo not found' });
+    res.status(404).json({ error: 'Demo not found' });
+    return;
   }
 
   demo.isActive = !demo.isActive;
@@ -1058,154 +1069,65 @@ router.patch('/demos/:demoId/toggle', asyncHandler(async (req, res) => {
 }));
 
 // Get customer analytics
-router.get('/customers/analytics', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    // Get all customers with their orders and reviews
-    const customers = await User.aggregate([
+router.get('/customers/analytics', asyncHandler(async (_req: Request, _res: Response) => {
+  const [
+    totalCustomers,
+    newCustomers,
+    activeCustomers,
+    customerSpending,
+    topCustomers
+  ] = await Promise.all([
+    User.countDocuments({ role: 'customer' }),
+    User.countDocuments({ 
+      role: 'customer',
+      createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
+    }),
+    Order.distinct('user', { 
+      paymentStatus: 'completed',
+      createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } // Last 90 days
+    }).then(userIds => userIds.length),
+    Order.aggregate([
+      { $match: { paymentStatus: 'completed' } },
       {
-        $match: { role: 'customer' }
-      },
-      {
-        $lookup: {
-          from: 'orders',
-          let: { userId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$user', '$$userId'] },
-                paymentStatus: 'completed',
-                isFakeOrder: { $ne: true }
-              }
-            },
-            {
-              $lookup: {
-                from: 'products',
-                localField: 'items.product',
-                foreignField: '_id',
-                as: 'productDetails'
-              }
-            },
-            {
-              $sort: { createdAt: -1 }
-            }
-          ],
-          as: 'orders'
+        $group: {
+          _id: '$user',
+          totalSpent: { $sum: '$totalAmount' },
+          orderCount: { $sum: 1 }
         }
       },
-      {
-        $lookup: {
-          from: 'reviews',
-          let: { userId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$user', '$$userId'] },
-                isActive: true,
-                isFakeReview: { $ne: true }
-              }
-            },
-            {
-              $lookup: {
-                from: 'products',
-                localField: 'product',
-                foreignField: '_id',
-                as: 'product'
-              }
-            },
-            {
-              $unwind: '$product'
-            },
-            {
-              $sort: { createdAt: -1 }
-            }
-          ],
-          as: 'reviews'
-        }
-      },
-      {
-        $addFields: {
-          totalOrders: { $size: '$orders' },
-          totalSpent: {
-            $sum: {
-              $map: {
-                input: '$orders',
-                as: 'order',
-                in: '$$order.totalAmount'
-              }
-            }
-          },
-          averageOrderValue: {
-            $cond: {
-              if: { $gt: [{ $size: '$orders' }, 0] },
-              then: {
-                $divide: [
-                  {
-                    $sum: {
-                      $map: {
-                        input: '$orders',
-                        as: 'order',
-                        in: '$$order.totalAmount'
-                      }
-                    }
-                  },
-                  { $size: '$orders' }
-                ]
-              },
-              else: 0
-            }
-          },
-          firstPurchaseDate: {
-            $min: {
-              $map: {
-                input: '$orders',
-                as: 'order',
-                in: '$$order.createdAt'
-              }
-            }
-          },
-          lastPurchaseDate: {
-            $max: {
-              $map: {
-                input: '$orders',
-                as: 'order',
-                in: '$$order.createdAt'
-              }
-            }
+      { $sort: { totalSpent: -1 } },
+      { $limit: 10 }
+    ]).then(async (results) => {
+      const enriched = await Promise.all(
+        results.map(async (result: any) => {
+          if (result._id) {
+            const user = await User.findById(result._id).select('name email');
+            return {
+              ...result,
+              user: user ? { name: user.name, email: user.email } : null
+            };
           }
-        }
-      },
-      {
-        $sort: { totalSpent: -1 }
-      }
-    ]);
+          return result;
+        })
+      );
+      return enriched.filter((item: any) => item.user !== null);
+    }),
+    User.find({ role: 'customer' })
+      .sort({ totalSpent: -1 })
+      .limit(10)
+      .select('name email totalSpent')
+  ]);
 
-    // Calculate overall stats
-    const totalCustomers = customers.length;
-    const activeCustomers = customers.filter(c => c.totalOrders > 0).length;
-    const repeatCustomers = customers.filter(c => c.totalOrders > 1).length;
-    const totalRevenue = customers.reduce((sum, c) => sum + c.totalSpent, 0);
-    const averageOrderValue = activeCustomers > 0 ? totalRevenue / customers.reduce((sum, c) => sum + c.totalOrders, 0) : 0;
-
-    const stats = {
+  _res.json({
+    success: true,
+    analytics: {
       totalCustomers,
+      newCustomers,
       activeCustomers,
-      repeatCustomers,
-      totalRevenue: Math.round(totalRevenue),
-      averageOrderValue: Math.round(averageOrderValue)
-    };
-
-    res.json({
-      success: true,
-      customers,
-      stats
-    });
-  } catch (error) {
-    console.error('Error fetching customer analytics:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch customer analytics'
-    });
-  }
+      customerSpending,
+      topCustomers
+    }
+  });
 }));
 
 export default router;

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { Order } from '../models/Order.model';
 import { Product } from '../models/Product.model';
 import { asyncHandler } from '../middleware/error.middleware';
@@ -6,16 +6,17 @@ import { verifyWebhookSignature } from '../utils/payment.utils';
 import { sendEmail, getOrderConfirmationEmail } from '../utils/email.utils';
 import { getSignedDownloadUrl } from '../utils/storage.utils';
 
-const router = Router();
+const router: Router = Router();
 
 // Razorpay webhook endpoint
 router.post('/razorpay', 
   // Raw body parser for webhook signature verification
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: Request, res: Response) => {
     const signature = req.headers['x-razorpay-signature'] as string;
     
     if (!signature) {
-      return res.status(400).json({ error: 'Missing signature' });
+      res.status(400).json({ error: 'Missing signature' });
+      return;
     }
 
     // Verify webhook signature
@@ -25,7 +26,8 @@ router.post('/razorpay',
     );
 
     if (!isValid) {
-      return res.status(400).json({ error: 'Invalid signature' });
+      res.status(400).json({ error: 'Invalid signature' });
+      return;
     }
 
     const { event, payload } = req.body;
@@ -98,6 +100,7 @@ async function handlePaymentCaptured(payment: any) {
           html: getOrderConfirmationEmail(
             customerName,
             order.orderNumber,
+            (order._id as any).toString(),
             products,
             order.totalAmount,
             firstProduct.pdfPassword,
