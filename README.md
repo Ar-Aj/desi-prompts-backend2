@@ -6,7 +6,7 @@ AI Prompt Pack E-commerce Backend API
 
 ```bash
 npm install
-npm start
+npm run dev
 ```
 
 ## Environment Variables
@@ -20,6 +20,7 @@ MONGODB_URI=your_mongodb_connection_string
 JWT_SECRET=your_jwt_secret
 RAZORPAY_KEY_ID=your_razorpay_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 AWS_ACCESS_KEY_ID=your_aws_access_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 AWS_REGION=ap-south-1
@@ -33,10 +34,10 @@ ADMIN_URL=http://localhost:5174
 
 1. Push this repository to GitHub
 2. Connect to Render
-3. Configure:
-   - **Build Command**: `npm install`
+3. The `render.yaml` file will automatically configure:
+   - **Build Command**: `npm run build`
    - **Start Command**: `npm start`
-   - **Node Version**: 18
+   - **Environment**: Node.js
 
 ## API Endpoints
 
@@ -54,4 +55,4 @@ ADMIN_URL=http://localhost:5174
 - JWT Authentication
 - Razorpay Payments
 - AWS S3 for file storage
-- Resend for emails# desi-prompts-backend
+- Resend for emails
