@@ -31,6 +31,9 @@ const corsOptions = {
   origin: [
     'http://localhost:5173', // Customer frontend
     'http://localhost:5174', // Admin frontend
+    'https://desiprompts.in', // Production customer frontend
+    'https://desiprompts.in/admin', // Production admin frontend
+    'https://www.desiprompts.in', // WWW version
     ...(process.env.CORS_ORIGINS || '').split(',').filter(Boolean)
   ],
   credentials: true,
