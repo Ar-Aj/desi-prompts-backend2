@@ -9,6 +9,39 @@ npm install
 npm run dev
 ```
 
+## Security Features
+
+This backend implements several security measures:
+
+- **Helmet.js**: Security headers including CSP, HSTS, and more
+- **CORS**: Strict origin allow-list for cross-origin requests
+- **HTTPS Enforcement**: Automatic redirect to HTTPS in production
+- **Webhook Security**: Razorpay webhook signature verification with idempotency protection
+
+## Testing
+
+### Unit Tests
+
+```bash
+npm test
+```
+
+### Webhook Signature Verification Test
+
+```bash
+npm run test:webhook
+```
+
+### Lighthouse CI
+
+```bash
+npm run lighthouse
+```
+
+## Webhook Testing
+
+For detailed instructions on testing Razorpay webhooks, see [/scripts/webhook-selftest.md](../scripts/webhook-selftest.md)
+
 ## Environment Variables
 
 Create a `.env` file:
@@ -47,6 +80,8 @@ ADMIN_URL=http://localhost:5174
 - `POST /api/orders` - Create order
 - `POST /api/payments/verify` - Verify Razorpay payment
 - `GET /api/download/:fileId` - Download purchased files
+- `GET /health` - Health check endpoint (build version and time)
+- `POST /api/webhooks/razorpay` - Razorpay webhook endpoint (secured with signature verification)
 
 ## Tech Stack
 

@@ -8,6 +8,18 @@ import { getSignedDownloadUrl } from '../utils/storage.utils';
 
 const router: Router = Router();
 
+// Simple in-memory store for processed event IDs (for idempotency)
+// In production, this should be stored in a database
+const processedEvents = new Set<string>();
+const EVENT_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Clean up old events periodically
+setInterval(() => {
+  // In a real implementation, we would clean up database entries
+  // For this in-memory implementation, we'll just log the size
+  console.log(`Currently tracking ${processedEvents.size} processed events`);
+}, 60 * 60 * 1000); // Every hour
+
 // Razorpay webhook endpoint
 router.post('/razorpay', 
   // Raw body parser for webhook signature verification
@@ -31,6 +43,20 @@ router.post('/razorpay',
     }
 
     const { event, payload } = req.body;
+    
+    // Extract event ID for idempotency
+    const eventId = payload?.payment?.entity?.id || payload?.refund?.entity?.id || 'unknown';
+    
+    // Check if event has already been processed (idempotency)
+    if (processedEvents.has(eventId)) {
+      console.log(`Duplicate event received and ignored: ${eventId}`);
+      res.json({ status: 'ok', message: 'Event already processed' });
+      return;
+    }
+
+    // Log request ID and event ID for debugging (without secrets)
+    const requestId = req.headers['x-request-id'] as string || 'unknown';
+    console.log(`Processing webhook event - Request ID: ${requestId}, Event ID: ${eventId}, Event: ${event}`);
 
     switch (event) {
       case 'payment.captured':
@@ -48,6 +74,15 @@ router.post('/razorpay',
       default:
         console.log(`Unhandled webhook event: ${event}`);
     }
+
+    // Mark event as processed
+    processedEvents.add(eventId);
+    
+    // Set a timeout to remove the event from the set after TTL
+    // In production, this should be handled by a database with TTL
+    setTimeout(() => {
+      processedEvents.delete(eventId);
+    }, EVENT_TTL);
 
     res.json({ status: 'ok' });
   })

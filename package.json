@@ -11,6 +11,7 @@
     "test:build": "node test-build.js",
     "lint": "eslint src/",
     "test": "jest",
+    "test:webhook": "tsx src/scripts/testWebhookSignature.ts",
     "seed:admin": "tsx src/scripts/seedAdmin.ts"
   },
   "dependencies": {
@@ -38,6 +39,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^1.4.13",
     "@types/node": "^20.11.5",
@@ -46,6 +48,7 @@
     "@typescript-eslint/parser": "^6.19.0",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
+    "ts-jest": "^29.4.4",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
