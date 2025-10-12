@@ -20,6 +20,11 @@ const fixImageUrls = async () => {
     const products = await Product.find({});
     console.log(`Found ${products.length} products to process`);
     
+    if (products.length === 0) {
+      console.log('No products found in database. Nothing to fix.');
+      return;
+    }
+    
     let updatedCount = 0;
     
     for (const product of products) {
@@ -31,7 +36,7 @@ const fixImageUrls = async () => {
         const imageUrl = newImages[i];
         
         // Check if the image URL starts with localhost
-        if (imageUrl.startsWith('http://localhost:5000')) {
+        if (imageUrl && typeof imageUrl === 'string' && imageUrl.startsWith('http://localhost:5000')) {
           // Replace with relative URL
           const newImageUrl = imageUrl.replace('http://localhost:5000', '');
           newImages[i] = newImageUrl;
