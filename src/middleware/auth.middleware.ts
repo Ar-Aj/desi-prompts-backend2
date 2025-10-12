@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.model';
+import { env } from '../config/environment.config';
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -19,7 +20,7 @@ export const authenticate = async (
       return;
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const decoded = jwt.verify(token, env.jwtSecret) as any;
     const user = await User.findById(decoded.userId).select('-password');
 
     if (!user) {
@@ -55,7 +56,7 @@ export const optionalAuth = async (
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      const decoded = jwt.verify(token, env.jwtSecret) as any;
       const user = await User.findById(decoded.userId).select('-password');
       req.user = user;
     }

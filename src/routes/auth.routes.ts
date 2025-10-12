@@ -13,9 +13,8 @@ const router: Router = Router();
 
 // Generate JWT token
 const generateToken = (userId: string): string => {
-  const secret = process.env.JWT_SECRET || 'fallback-secret';
   // @ts-ignore
-  return jwt.sign({ userId }, secret, { expiresIn: '7d' });
+  return jwt.sign({ userId }, env.jwtSecret, { expiresIn: '7d' });
 };
 
 // Signup
