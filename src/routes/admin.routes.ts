@@ -82,9 +82,10 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
 
   const imageUrl = `/uploads/images/${req.file.filename}`;
   
+  // Use relative URLs to avoid cross-origin issues
   res.json({
     success: true,
-    imageUrl: `http://localhost:5000${imageUrl}`,
+    imageUrl: imageUrl,
     filename: req.file.filename
   });
 }));
