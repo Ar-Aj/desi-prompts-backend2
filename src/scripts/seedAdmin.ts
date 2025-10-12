@@ -1,15 +1,17 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { User } from '../models/User.model';
+import { env } from '../config/environment.config';
 
 // Load environment variables
 dotenv.config();
 
 const seedAdmin = async () => {
   try {
-    // Connect to MongoDB
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/indian-promptpack');
+    // Connect to MongoDB using the environment configuration
+    await mongoose.connect(env.mongoUri);
     console.log('✅ Connected to MongoDB');
+    console.log(`🔗 Connection URL: ${env.mongoUri}`);
 
     // Check if admin already exists
     const existingAdmin = await User.findOne({ email: 'admin@indianpromptpack.com' });
