@@ -12,7 +12,8 @@
     "lint": "eslint src/",
     "test": "jest",
     "test:webhook": "tsx src/scripts/testWebhookSignature.ts",
-    "seed:admin": "tsx src/scripts/seedAdmin.ts"
+    "seed:admin": "tsx src/scripts/seedAdmin.ts",
+    "fix:image-urls": "tsx src/scripts/fixImageUrls.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.490.0",
