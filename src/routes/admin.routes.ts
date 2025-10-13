@@ -77,8 +77,10 @@ router.use(authorizeAdmin);
 
 // Image upload endpoint
 router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
-  console.log('Image upload request received');
+  console.log('=== Image Upload Request ===');
+  console.log('Request received at:', new Date().toISOString());
   console.log('File info:', req.file);
+  console.log('Headers:', req.headers);
   
   if (!req.file) {
     console.log('No file provided in request');
@@ -97,31 +99,48 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     const isProduction = process.env.MODE === 'production';
     const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
     
-    const fullImageUrl = isProduction ? `${backendUrl}${imageUrl}` : imageUrl;
+    // Ensure backendUrl doesn't end with a slash
+    const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+    // Ensure imageUrl starts with a slash
+    const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    
+    const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
     
     // Log the generated URL for debugging
-    console.log('Generated image URL:', fullImageUrl);
+    console.log('=== Image URL Generation ===');
+    console.log('Original backendUrl:', backendUrl);
+    console.log('Cleaned backendUrl:', cleanBackendUrl);
+    console.log('Original imageUrl:', imageUrl);
+    console.log('Cleaned imageUrl:', cleanImageUrl);
+    console.log('Full image URL:', fullImageUrl);
     console.log('Backend URL from env:', process.env.BACKEND_URL);
     console.log('Is production mode:', isProduction);
     
     // Verify the file exists
     const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
-    if (fs.existsSync(filePath)) {
-      console.log('File exists at:', filePath);
-    } else {
-      console.log('File does not exist at:', filePath);
-    }
+    const fileExists = fs.existsSync(filePath);
+    console.log('File exists at:', filePath, fileExists);
     
     res.json({
       success: true,
       imageUrl: fullImageUrl,
-      filename: req.file.filename
+      filename: req.file.filename,
+      debug: {
+        backendUrl: cleanBackendUrl,
+        isProduction,
+        fileExists,
+        timestamp: new Date().toISOString()
+      }
     });
   } catch (error) {
     console.error('Image upload error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to process image upload'
+      error: 'Failed to process image upload',
+      debug: {
+        timestamp: new Date().toISOString(),
+        errorMessage: error instanceof Error ? error.message : String(error)
+      }
     });
   }
 }));
