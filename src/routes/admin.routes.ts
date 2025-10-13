@@ -105,17 +105,6 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     
     const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
     
-    // Temporary debugging
-    console.log('=== IMAGE URL GENERATION DEBUG ===');
-    console.log('isProduction:', isProduction);
-    console.log('backendUrl:', backendUrl);
-    console.log('cleanBackendUrl:', cleanBackendUrl);
-    console.log('imageUrl:', imageUrl);
-    console.log('cleanImageUrl:', cleanImageUrl);
-    console.log('fullImageUrl:', fullImageUrl);
-    console.log('filename:', req.file.filename);
-    console.log('==============================');
-    
     res.json({
       success: true,
       imageUrl: fullImageUrl,

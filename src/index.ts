@@ -107,14 +107,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
 
 // Serve uploaded images
-app.use('/uploads', (req, res, next) => {
-  // Temporary debugging
-  console.log('=== STATIC FILE REQUEST DEBUG ===');
-  console.log('Request URL:', req.url);
-  console.log('Request method:', req.method);
-  console.log('==============================');
-  next();
-}, express.static(path.join(process.cwd(), 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // API routes
 app.use('/api/auth', authRoutes);

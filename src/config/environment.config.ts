@@ -40,16 +40,6 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
   const mode = (process.env.MODE || 'development') as 'development' | 'production';
   const isProduction = mode === 'production';
   
-  // Log for debugging in production
-  if (process.env.NODE_ENV === 'production') {
-    console.log('=== ENVIRONMENT CONFIG DEBUG ===');
-    console.log('process.env.MODE:', process.env.MODE);
-    console.log('mode:', mode);
-    console.log('isProduction:', isProduction);
-    console.log('process.env.NODE_ENV:', process.env.NODE_ENV);
-    console.log('==============================');
-  }
-  
   // Base configuration
   const config: EnvironmentConfig = {
     mode,
@@ -90,13 +80,6 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
       endpoint: process.env.S3_ENDPOINT || 'https://s3.eu-north-1.amazonaws.com',
     }
   };
-
-  // Log for debugging in production
-  if (process.env.NODE_ENV === 'production') {
-    console.log('=== BACKEND URL DEBUG ===');
-    console.log('BACKEND_URL from env:', process.env.BACKEND_URL);
-    console.log('========================');
-  }
 
   // Add Razorpay config if available
   if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
