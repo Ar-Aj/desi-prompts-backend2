@@ -22,7 +22,6 @@ const storage = multer.diskStorage({
     if (!fs.existsSync(uploadDir)) {
       try {
         fs.mkdirSync(uploadDir, { recursive: true });
-        console.log('Created upload directory:', uploadDir);
       } catch (error) {
         console.error('Failed to create upload directory:', error);
       }
@@ -43,10 +42,10 @@ const upload = multer({
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
-  fileFilter: (_req, _file, cb) => {
+  fileFilter: (_req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(_file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(_file.mimetype);
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
 
     if (mimetype && extname) {
       return cb(null, true);
@@ -77,13 +76,7 @@ router.use(authorizeAdmin);
 
 // Image upload endpoint
 router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
-  console.log('=== Image Upload Request ===');
-  console.log('Request received at:', new Date().toISOString());
-  console.log('File info:', req.file);
-  console.log('Headers:', req.headers);
-  
   if (!req.file) {
-    console.log('No file provided in request');
     res.status(400).json({
       success: false,
       error: 'No image file provided'
@@ -92,6 +85,12 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
   }
 
   try {
+    // Verify the file was actually saved
+    const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
+    if (!fs.existsSync(filePath)) {
+      throw new Error('File was not saved to disk');
+    }
+    
     const imageUrl = `/uploads/images/${req.file.filename}`;
     
     // In production, use absolute URLs pointing to the backend server
@@ -106,41 +105,16 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     
     const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
     
-    // Log the generated URL for debugging
-    console.log('=== Image URL Generation ===');
-    console.log('Original backendUrl:', backendUrl);
-    console.log('Cleaned backendUrl:', cleanBackendUrl);
-    console.log('Original imageUrl:', imageUrl);
-    console.log('Cleaned imageUrl:', cleanImageUrl);
-    console.log('Full image URL:', fullImageUrl);
-    console.log('Backend URL from env:', process.env.BACKEND_URL);
-    console.log('Is production mode:', isProduction);
-    
-    // Verify the file exists
-    const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
-    const fileExists = fs.existsSync(filePath);
-    console.log('File exists at:', filePath, fileExists);
-    
     res.json({
       success: true,
       imageUrl: fullImageUrl,
-      filename: req.file.filename,
-      debug: {
-        backendUrl: cleanBackendUrl,
-        isProduction,
-        fileExists,
-        timestamp: new Date().toISOString()
-      }
+      filename: req.file.filename
     });
   } catch (error) {
     console.error('Image upload error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to process image upload',
-      debug: {
-        timestamp: new Date().toISOString(),
-        errorMessage: error instanceof Error ? error.message : String(error)
-      }
+      error: 'Failed to process image upload'
     });
   }
 }));

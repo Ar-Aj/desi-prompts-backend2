@@ -6,14 +6,6 @@ import path from 'path';
 import passport from './config/passport.config';
 import { env } from './config/environment.config';
 
-// Log uploads directory info
-const uploadsDir = path.join(process.cwd(), 'uploads');
-const imagesDir = path.join(uploadsDir, 'images');
-console.log('Uploads directory:', uploadsDir);
-console.log('Images directory:', imagesDir);
-console.log('Uploads directory exists:', require('fs').existsSync(uploadsDir));
-console.log('Images directory exists:', require('fs').existsSync(imagesDir));
-
 // Import routes
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
@@ -53,7 +45,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://desiprompts.in", "https://*.s3.*.amazonaws.com", "https://desi-prompts-backend2-3.onrender.com"],
+      imgSrc: ["'self'", "data:", "https://desiprompts.in", "https://*.s3.*.amazonaws.com", "https://desi-prompts-backend2-3.onrender.com", "*"],
       connectSrc: ["'self'", "https://lumberjack.razorpay.com", "https://desi-prompts-backend2-3.onrender.com"],
       frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
       objectSrc: ["'none'"],
@@ -76,19 +68,9 @@ if (process.env.NODE_ENV === 'production') {
       return;
     }
     
-    // Log HTTPS redirect attempts
-    console.log('HTTPS check:', {
-      protocol: req.protocol,
-      secure: req.secure,
-      forwardedProto: req.header('x-forwarded-proto'),
-      host: req.header('host'),
-      url: req.url
-    });
-    
     // Check if the request is already HTTPS or if it's coming through a proxy
     if (req.header('x-forwarded-proto') !== 'https' && !req.secure) {
       const redirectUrl = `https://${req.header('host')}${req.url}`;
-      console.log('Redirecting to HTTPS:', redirectUrl);
       res.redirect(redirectUrl);
     } else {
       next();
@@ -124,29 +106,8 @@ app.use(express.urlencoded({ extended: true }));
 // Initialize passport
 app.use(passport.initialize());
 
-// Serve uploaded images with proper CORS headers
-app.use('/uploads', (req, res, next) => {
-  console.log('Static file request:', req.url, req.method);
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Max-Age', '3600');
-  
-  // Add cache control headers
-  res.header('Cache-Control', 'public, max-age=3600');
-  
-  next();
-}, express.static(path.join(process.cwd(), 'uploads')));
-
-// Handle CORS preflight requests for uploads
-app.options('/uploads/*', (req, res) => {
-  console.log('CORS preflight request for uploads:', req.url);
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Max-Age', '3600');
-  res.sendStatus(200);
-});
+// Serve uploaded images
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // API routes
 app.use('/api/auth', authRoutes);
