@@ -82,10 +82,14 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
 
   const imageUrl = `/uploads/images/${req.file.filename}`;
   
-  // Use relative URLs to avoid cross-origin issues
+  // Use absolute URLs in production, relative in development
+  const baseUrl = process.env.NODE_ENV === 'production' 
+    ? process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`
+    : '';
+  
   res.json({
     success: true,
-    imageUrl: imageUrl,
+    imageUrl: `${baseUrl}${imageUrl}`,
     filename: req.file.filename
   });
 }));
