@@ -42,10 +42,10 @@ const upload = multer({
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req, _file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const extname = allowedTypes.test(path.extname(_file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(_file.mimetype);
 
     if (mimetype && extname) {
       return cb(null, true);
@@ -104,6 +104,17 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
     
     const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
+    
+    // Temporary debugging
+    console.log('=== IMAGE URL GENERATION DEBUG ===');
+    console.log('isProduction:', isProduction);
+    console.log('backendUrl:', backendUrl);
+    console.log('cleanBackendUrl:', cleanBackendUrl);
+    console.log('imageUrl:', imageUrl);
+    console.log('cleanImageUrl:', cleanImageUrl);
+    console.log('fullImageUrl:', fullImageUrl);
+    console.log('filename:', req.file.filename);
+    console.log('==============================');
     
     res.json({
       success: true,
