@@ -30,8 +30,8 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://desiprompts.in", "https://*.s3.*.amazonaws.com"],
-      connectSrc: ["'self'", "https://lumberjack.razorpay.com"],
+      imgSrc: ["'self'", "data:", "https://desiprompts.in", "https://*.s3.*.amazonaws.com", "https://desi-prompts-backend2-3.onrender.com", "https://*.onrender.com"],
+      connectSrc: ["'self'", "https://lumberjack.razorpay.com", "https://desi-prompts-backend2-3.onrender.com"],
       frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],
@@ -47,7 +47,8 @@ app.use(helmet({
 // Enforce HTTPS in production
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
-    if (req.header('x-forwarded-proto') !== 'https') {
+    // Check if the request is already HTTPS or if it's coming through a proxy
+    if (req.header('x-forwarded-proto') !== 'https' && !req.secure) {
       res.redirect(`https://${req.header('host')}${req.url}`);
     } else {
       next();
@@ -63,6 +64,7 @@ const corsOptions = {
     'https://desiprompts.in', // Production customer frontend
     'https://desiprompts.in/admin', // Production admin frontend
     'https://www.desiprompts.in', // WWW version
+    'https://desi-prompts-backend2-3.onrender.com', // Render backend
     ...(process.env.CORS_ORIGINS || '').split(',').filter(Boolean)
   ],
   credentials: true,
@@ -82,8 +84,23 @@ app.use(express.urlencoded({ extended: true }));
 // Initialize passport
 app.use(passport.initialize());
 
-// Serve uploaded images
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Serve uploaded images with proper CORS headers
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Max-Age', '3600');
+  next();
+}, express.static(path.join(process.cwd(), 'uploads')));
+
+// Handle CORS preflight requests for uploads
+app.options('/uploads/*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Max-Age', '3600');
+  res.sendStatus(200);
+});
 
 // API routes
 app.use('/api/auth', authRoutes);

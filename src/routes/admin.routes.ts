@@ -20,7 +20,12 @@ const storage = multer.diskStorage({
     const uploadDir = path.join(process.cwd(), 'uploads', 'images');
     // Create directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+      try {
+        fs.mkdirSync(uploadDir, { recursive: true });
+        console.log('Created upload directory:', uploadDir);
+      } catch (error) {
+        console.error('Failed to create upload directory:', error);
+      }
     }
     cb(null, uploadDir);
   },
@@ -72,7 +77,11 @@ router.use(authorizeAdmin);
 
 // Image upload endpoint
 router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
+  console.log('Image upload request received');
+  console.log('File info:', req.file);
+  
   if (!req.file) {
+    console.log('No file provided in request');
     res.status(400).json({
       success: false,
       error: 'No image file provided'
@@ -80,20 +89,41 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     return;
   }
 
-  const imageUrl = `/uploads/images/${req.file.filename}`;
-  
-  // In production, use absolute URLs pointing to the backend server
-  // In development, use relative URLs
-  const isProduction = process.env.NODE_ENV === 'production';
-  const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
-  
-  const fullImageUrl = isProduction ? `${backendUrl}${imageUrl}` : imageUrl;
-  
-  res.json({
-    success: true,
-    imageUrl: fullImageUrl,
-    filename: req.file.filename
-  });
+  try {
+    const imageUrl = `/uploads/images/${req.file.filename}`;
+    
+    // In production, use absolute URLs pointing to the backend server
+    // In development, use relative URLs
+    const isProduction = process.env.MODE === 'production';
+    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+    
+    const fullImageUrl = isProduction ? `${backendUrl}${imageUrl}` : imageUrl;
+    
+    // Log the generated URL for debugging
+    console.log('Generated image URL:', fullImageUrl);
+    console.log('Backend URL from env:', process.env.BACKEND_URL);
+    console.log('Is production mode:', isProduction);
+    
+    // Verify the file exists
+    const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
+    if (fs.existsSync(filePath)) {
+      console.log('File exists at:', filePath);
+    } else {
+      console.log('File does not exist at:', filePath);
+    }
+    
+    res.json({
+      success: true,
+      imageUrl: fullImageUrl,
+      filename: req.file.filename
+    });
+  } catch (error) {
+    console.error('Image upload error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process image upload'
+    });
+  }
 }));
 
 // PDF upload endpoint for S3
