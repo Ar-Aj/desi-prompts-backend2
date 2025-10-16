@@ -35,11 +35,33 @@ const storage = multer.diskStorage({
   }
 });
 
+// Configure multer for image uploads (memory storage for S3)
+const imageStorage = multer.memoryStorage();
+
 // Configure multer for PDF uploads (memory storage for S3)
 const pdfStorage = multer.memoryStorage();
 
-const upload = multer({
-  storage,
+// Create different upload configurations
+const devImageUpload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: (_req, _file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(_file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(_file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+});
+
+const prodImageUpload = multer({
+  storage: imageStorage,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
   },
@@ -108,103 +130,117 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 }));
 
 // Image upload endpoint
-router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
-  if (!req.file) {
-    res.status(400).json({
-      success: false,
-      error: 'No image file provided'
-    });
-    return;
-  }
-
-  try {
-    // Use the same environment detection as the rest of the app
-    const isProduction = env.mode === 'production';
-    console.log('Image upload - Environment detection:', { 
-      mode: env.mode, 
-      isProduction 
-    });
-    
-    if (isProduction) {
-      // Production: Upload to S3
-      console.log('Uploading image to S3 in production mode');
-      
-      // Import S3 utilities
-      const { uploadFile, generateFileKey } = require('../utils/storage.utils');
-      
-      // Generate unique file key
-      const fileKey = generateFileKey('images', req.file.originalname);
-      
-      // Upload to S3
-      await uploadFile(req.file.buffer, fileKey, req.file.mimetype);
-      
-      // Generate signed URL for the S3 image (needed for private buckets)
-      const { getSignedDownloadUrl, checkFileExists } = require('../utils/storage.utils');
-      const imageUrl = await getSignedDownloadUrl(fileKey);
-      
-      // Verify the file was uploaded correctly
-      const fileExists = await checkFileExists(fileKey);
-      console.log('Image upload verification:', { fileKey, fileExists, imageUrl });
-      
-      res.json({
-        success: true,
-        imageUrl,
-        filename: req.file.originalname,
-        fileKey
+router.post('/upload-image', asyncHandler(async (req: Request, res: Response) => {
+  // Use the same environment detection as the rest of the app
+  const isProduction = env.mode === 'production';
+  console.log('Image upload - Environment detection:', { 
+    mode: env.mode, 
+    isProduction 
+  });
+  
+  // Choose the appropriate multer middleware based on environment
+  const imageUpload = isProduction ? prodImageUpload : devImageUpload;
+  
+  // Process the upload
+  imageUpload.single('image')(req, res, async (err) => {
+    if (err) {
+      console.error('Multer error:', err);
+      res.status(400).json({
+        success: false,
+        error: err.message || 'File upload failed'
       });
-    } else {
-      // Development: Save to local storage
-      console.log('Saving image to local storage in development mode');
-      
-      // Verify the file was actually saved
-      const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
-      if (!fs.existsSync(filePath)) {
-        throw new Error('File was not saved to disk');
+      return;
+    }
+    
+    if (!req.file) {
+      res.status(400).json({
+        success: false,
+        error: 'No image file provided'
+      });
+      return;
+    }
+
+    try {
+      if (isProduction) {
+        // Production: Upload to S3
+        console.log('Uploading image to S3 in production mode');
+        
+        // Import S3 utilities
+        const { uploadFile, generateFileKey } = require('../utils/storage.utils');
+        
+        // Generate unique file key
+        const fileKey = generateFileKey('images', req.file.originalname);
+        
+        // Upload to S3
+        await uploadFile(req.file.buffer, fileKey, req.file.mimetype);
+        
+        // Generate signed URL for the S3 image (needed for private buckets)
+        const { getSignedDownloadUrl, checkFileExists } = require('../utils/storage.utils');
+        const imageUrl = await getSignedDownloadUrl(fileKey);
+        
+        // Verify the file was uploaded correctly
+        const fileExists = await checkFileExists(fileKey);
+        
+        res.json({
+          success: true,
+          imageUrl,
+          filename: req.file.originalname,
+          fileKey
+        });
+      } else {
+        // Development: Save to local storage
+        console.log('Saving image to local storage in development mode');
+        
+        // Verify the file was actually saved
+        const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
+        if (!fs.existsSync(filePath)) {
+          throw new Error('File was not saved to disk');
+        }
+        
+        const imageUrl = `/uploads/images/${req.file.filename}`;
+        
+        // Use the backend URL from environment config or fallback to request host
+        let backendUrl = isProduction 
+          ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL)
+          : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL);
+        
+        // If no backend URL is configured, try to infer it from the request
+        if (!backendUrl && req.get('host')) {
+          const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+          backendUrl = `${protocol}://${req.get('host')}`;
+          console.log('Image upload - Inferred backend URL:', backendUrl);
+        }
+        
+        // Fallback to default
+        backendUrl = backendUrl || (isProduction 
+          ? `https://desi-prompts-backend2-3.onrender.com`
+          : `http://localhost:${process.env.PORT || 5000}`);
+        
+        console.log('Image upload - Backend URL configuration:', { backendUrl, isProduction });
+        
+        // Ensure backendUrl doesn't end with a slash
+        const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+        // Ensure imageUrl starts with a slash
+        const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+        
+        const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
+        
+        console.log('Image upload - Final URL:', { fullImageUrl, cleanImageUrl });
+        
+        res.json({
+          success: true,
+          imageUrl: fullImageUrl,
+          filename: req.file.filename
+        });
       }
-      
-      const imageUrl = `/uploads/images/${req.file.filename}`;
-      
-      // Use the backend URL from environment config or fallback to request host
-      let backendUrl = isProduction 
-        ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL)
-        : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL);
-      
-      // If no backend URL is configured, try to infer it from the request
-      if (!backendUrl && req.get('host')) {
-        const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-        backendUrl = `${protocol}://${req.get('host')}`;
-        console.log('Image upload - Inferred backend URL:', backendUrl);
-      }
-      
-      // Fallback to default
-      backendUrl = backendUrl || (isProduction 
-        ? `https://desi-prompts-backend2-3.onrender.com`
-        : `http://localhost:${process.env.PORT || 5000}`);
-      
-      console.log('Image upload - Backend URL configuration:', { backendUrl, isProduction });
-      
-      // Ensure backendUrl doesn't end with a slash
-      const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
-      // Ensure imageUrl starts with a slash
-      const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
-      
-      const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
-      
-      console.log('Image upload - Final URL:', { fullImageUrl, cleanImageUrl });
-      
-      res.json({
-        success: true,
-        imageUrl: fullImageUrl,
-        filename: req.file.filename
+    } catch (error) {
+      console.error('Image upload error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process image upload'
       });
     }
-  } catch (error) {
-    console.error('Image upload error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to process image upload'
-    });
-  }
+  });
 }));
 
 // PDF upload endpoint for S3
@@ -244,7 +280,6 @@ router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: Req
       
       // Verify the file was uploaded correctly
       const fileExists = await checkFileExists(fileKey);
-      console.log('PDF upload verification:', { fileKey, fileExists, pdfUrl });
       
       res.json({
         success: true,

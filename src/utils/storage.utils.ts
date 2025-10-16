@@ -20,7 +20,18 @@ export const uploadFile = async (
   contentType: string
 ): Promise<string> => {
   try {
-    console.log('Uploading file to S3:', { key, contentType, fileSize: file.length });
+    // Validate file parameter
+    if (!file) {
+      throw new Error('File buffer is undefined or null');
+    }
+    
+    if (!key) {
+      throw new Error('File key is required');
+    }
+    
+    if (!contentType) {
+      throw new Error('Content type is required');
+    }
     
     const command = new PutObjectCommand({
       Bucket: env.s3.bucketName!,
@@ -34,7 +45,6 @@ export const uploadFile = async (
     });
 
     const response = await s3Client.send(command);
-    console.log('File uploaded successfully:', { key, response });
     
     // Return the key for later retrieval
     return key;
@@ -51,11 +61,8 @@ export const getSignedDownloadUrl = async (
   try {
     // If it's already a full URL, return as is
     if (keyOrUrl.startsWith('http')) {
-      console.log('Returning existing URL:', keyOrUrl);
       return keyOrUrl;
     }
-    
-    console.log('Generating signed URL for key:', { keyOrUrl, expiresIn });
     
     // Otherwise, treat it as a key and generate a signed URL
     const command = new GetObjectCommand({
@@ -64,7 +71,6 @@ export const getSignedDownloadUrl = async (
     });
 
     const url = await getSignedUrl(s3Client, command, { expiresIn });
-    console.log('Generated signed URL:', { keyOrUrl, url });
     return url;
   } catch (error) {
     console.error('Error generating signed URL:', error);
@@ -83,7 +89,6 @@ export const checkFileExists = async (key: string): Promise<boolean> => {
     await s3Client.send(command);
     return true;
   } catch (error) {
-    console.error('Error checking file existence:', error);
     return false;
   }
 };
