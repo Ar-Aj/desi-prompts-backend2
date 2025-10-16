@@ -118,13 +118,35 @@ app.use('/api/support', supportRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
-app.get('/health', (_req, res) => {
+app.get('/health', async (_req, res) => {
+  // Check MongoDB connection
+  let dbStatus = 'disconnected';
+  try {
+    if (mongoose.connection.readyState === 1) {
+      dbStatus = 'connected';
+    }
+  } catch (error) {
+    console.error('Health check - DB error:', error);
+  }
+  
   res.status(200).json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
+    mode: env.mode,
+    port: PORT,
+    database: dbStatus,
     version: process.env.npm_package_version || '1.0.0',
     uptime: process.uptime()
+  });
+});
+
+// Readiness probe for Render
+app.get('/ready', (_req, res) => {
+  res.status(200).json({ 
+    status: 'ready',
+    timestamp: new Date().toISOString(),
+    port: PORT
   });
 });
 
@@ -147,12 +169,34 @@ const startServer = async () => {
   // Try to connect to MongoDB but don't fail if it's not available
   await connectDB();
   
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📝 Environment: ${process.env.NODE_ENV}`);
     console.log(`🌐 Frontend URLs:`);
     console.log(`   Customer: http://localhost:5173`);
     console.log(`   Admin: http://localhost:5174`);
+    
+    // Signal readiness for Render
+    if (process.send) {
+      process.send('ready');
+    }
+  });
+  
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully');
+    server.close(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
   });
 };
 
