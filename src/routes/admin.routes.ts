@@ -86,14 +86,6 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
   }
 
   try {
-    // Verify the file was actually saved
-    const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
-    if (!fs.existsSync(filePath)) {
-      throw new Error('File was not saved to disk');
-    }
-    
-    const imageUrl = `/uploads/images/${req.file.filename}`;
-    
     // Use the same environment detection as the rest of the app
     const isProduction = env.mode === 'production';
     console.log('Image upload - Environment detection:', { 
@@ -101,39 +93,74 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
       isProduction 
     });
     
-    // Use the backend URL from environment config or fallback to request host
-    let backendUrl = isProduction 
-      ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL)
-      : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL);
-    
-    // If no backend URL is configured, try to infer it from the request
-    if (!backendUrl && req.get('host')) {
-      const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-      backendUrl = `${protocol}://${req.get('host')}`;
-      console.log('Image upload - Inferred backend URL:', backendUrl);
+    if (isProduction) {
+      // Production: Upload to S3
+      console.log('Uploading image to S3 in production mode');
+      
+      // Import S3 utilities
+      const { uploadFile, generateFileKey } = require('../utils/storage.utils');
+      
+      // Generate unique file key
+      const fileKey = generateFileKey('images', req.file.originalname);
+      
+      // Upload to S3
+      await uploadFile(req.file.buffer, fileKey, req.file.mimetype);
+      
+      // Return only the key for storage in database
+      console.log('Image uploaded to S3:', { fileKey });
+      
+      res.json({
+        success: true,
+        imageUrl: fileKey, // Store only the key in production
+        filename: req.file.originalname,
+        fileKey
+      });
+    } else {
+      // Development: Save to local storage
+      console.log('Saving image to local storage in development mode');
+      
+      // Verify the file was actually saved
+      const filePath = path.join(process.cwd(), 'uploads', 'images', req.file.filename);
+      if (!fs.existsSync(filePath)) {
+        throw new Error('File was not saved to disk');
+      }
+      
+      const imageUrl = `/uploads/images/${req.file.filename}`;
+      
+      // Use the backend URL from environment config or fallback to request host
+      let backendUrl = isProduction 
+        ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL)
+        : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL);
+      
+      // If no backend URL is configured, try to infer it from the request
+      if (!backendUrl && req.get('host')) {
+        const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+        backendUrl = `${protocol}://${req.get('host')}`;
+        console.log('Image upload - Inferred backend URL:', backendUrl);
+      }
+      
+      // Fallback to default
+      backendUrl = backendUrl || (isProduction 
+        ? `https://desi-prompts-backend2-3.onrender.com`
+        : `http://localhost:${process.env.PORT || 5000}`);
+      
+      console.log('Image upload - Backend URL configuration:', { backendUrl, isProduction });
+      
+      // Ensure backendUrl doesn't end with a slash
+      const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+      // Ensure imageUrl starts with a slash
+      const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+      
+      const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
+      
+      console.log('Image upload - Final URL:', { fullImageUrl, cleanImageUrl });
+      
+      res.json({
+        success: true,
+        imageUrl: fullImageUrl,
+        filename: req.file.filename
+      });
     }
-    
-    // Fallback to default
-    backendUrl = backendUrl || (isProduction 
-      ? `https://desi-prompts-backend2-3.onrender.com`
-      : `http://localhost:${process.env.PORT || 5000}`);
-    
-    console.log('Image upload - Backend URL configuration:', { backendUrl, isProduction });
-    
-    // Ensure backendUrl doesn't end with a slash
-    const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
-    // Ensure imageUrl starts with a slash
-    const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
-    
-    const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
-    
-    console.log('Image upload - Final URL:', { fullImageUrl, cleanImageUrl });
-    
-    res.json({
-      success: true,
-      imageUrl: fullImageUrl,
-      filename: req.file.filename
-    });
   } catch (error) {
     console.error('Image upload error:', error);
     res.status(500).json({
@@ -154,25 +181,93 @@ router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: Req
   }
 
   try {
-    // Import S3 utilities
-    const { uploadFile } = require('../utils/storage.utils');
-    
-    // Generate unique file key
-    const fileKey = `pdfs/${Date.now()}-${Math.round(Math.random() * 1E9)}.pdf`;
-    
-    // Upload to S3
-    await uploadFile(req.file.buffer, fileKey, 'application/pdf');
-    
-    res.json({
-      success: true,
-      fileKey,
-      message: 'PDF uploaded successfully to S3'
+    // Use the same environment detection as the rest of the app
+    const isProduction = env.mode === 'production';
+    console.log('PDF upload - Environment detection:', { 
+      mode: env.mode, 
+      isProduction 
     });
+    
+    if (isProduction) {
+      // Production: Upload to S3
+      console.log('Uploading PDF to S3 in production mode');
+      
+      // Import S3 utilities
+      const { uploadFile, generateFileKey } = require('../utils/storage.utils');
+      
+      // Generate unique file key
+      const fileKey = generateFileKey('pdfs', req.file.originalname);
+      
+      // Upload to S3
+      await uploadFile(req.file.buffer, fileKey, 'application/pdf');
+      
+      // Return only the key for storage in database
+      console.log('PDF uploaded to S3:', { fileKey });
+      
+      res.json({
+        success: true,
+        pdfUrl: fileKey, // Store only the key in production
+        filename: req.file.originalname,
+        fileKey
+      });
+    } else {
+      // Development: Save to local storage
+      console.log('Saving PDF to local storage in development mode');
+      
+      // Save file to local storage
+      const filename = `pdfs/${Date.now()}-${Math.round(Math.random() * 1E9)}.pdf`;
+      const filePath = path.join(process.cwd(), 'uploads', filename);
+      
+      // Ensure directory exists
+      const dirPath = path.dirname(filePath);
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
+      
+      // Write file
+      fs.writeFileSync(filePath, req.file.buffer);
+      
+      const pdfUrl = `/uploads/${filename}`;
+      
+      // Use the backend URL from environment config or fallback to request host
+      let backendUrl = isProduction 
+        ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL)
+        : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL);
+      
+      // If no backend URL is configured, try to infer it from the request
+      if (!backendUrl && req.get('host')) {
+        const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+        backendUrl = `${protocol}://${req.get('host')}`;
+        console.log('PDF upload - Inferred backend URL:', backendUrl);
+      }
+      
+      // Fallback to default
+      backendUrl = backendUrl || (isProduction 
+        ? `https://desi-prompts-backend2-3.onrender.com`
+        : `http://localhost:${process.env.PORT || 5000}`);
+      
+      console.log('PDF upload - Backend URL configuration:', { backendUrl, isProduction });
+      
+      // Ensure backendUrl doesn't end with a slash
+      const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
+      // Ensure pdfUrl starts with a slash
+      const cleanPdfUrl = pdfUrl.startsWith('/') ? pdfUrl : `/${pdfUrl}`;
+      
+      const fullPdfUrl = isProduction ? `${cleanBackendUrl}${cleanPdfUrl}` : cleanPdfUrl;
+      
+      console.log('PDF upload - Final URL:', { fullPdfUrl, cleanPdfUrl });
+      
+      res.json({
+        success: true,
+        pdfUrl: fullPdfUrl,
+        filename: req.file.originalname
+      });
+    }
   } catch (error) {
     console.error('PDF upload error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to upload PDF to S3'
+      error: 'Failed to upload PDF'
     });
   }
 }));

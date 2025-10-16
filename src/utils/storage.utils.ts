@@ -36,13 +36,19 @@ export const uploadFile = async (
 };
 
 export const getSignedDownloadUrl = async (
-  key: string,
+  keyOrUrl: string,
   expiresIn: number = 1800 // 30 minutes default
 ): Promise<string> => {
   try {
+    // If it's already a full URL, return as is
+    if (keyOrUrl.startsWith('http')) {
+      return keyOrUrl;
+    }
+    
+    // Otherwise, treat it as a key and generate a signed URL
     const command = new GetObjectCommand({
       Bucket: env.s3.bucketName!,
-      Key: key
+      Key: keyOrUrl
     });
 
     const url = await getSignedUrl(s3Client, command, { expiresIn });

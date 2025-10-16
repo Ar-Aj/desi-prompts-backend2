@@ -316,13 +316,26 @@ router.get('/:orderId/download/:productId', asyncHandler(async (req: Request, re
     return;
   }
 
-  const downloadUrl = await getSignedDownloadUrl(product.pdfUrl);
+  // Handle both local and S3 storage
+  let downloadUrl;
+  const isProduction = process.env.MODE === 'production' || process.env.NODE_ENV === 'production';
+  
+  if (isProduction) {
+    // Production: Use S3 signed URL
+    // The product.pdfUrl should contain just the S3 key
+    const { getSignedDownloadUrl } = require('../utils/storage.utils');
+    downloadUrl = await getSignedDownloadUrl(product.pdfUrl);
+  } else {
+    // Development: Use direct URL
+    // The product.pdfUrl should contain the full local URL
+    downloadUrl = product.pdfUrl;
+  }
 
   res.json({
     success: true,
     downloadUrl,
     password: product.pdfPassword,
-    expiresIn: '30 minutes'
+    expiresIn: isProduction ? '30 minutes' : 'permanent'
   });
 }));
 
