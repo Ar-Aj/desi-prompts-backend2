@@ -44,7 +44,7 @@ export const uploadFile = async (
       }
     });
 
-    const response = await s3Client.send(command);
+    await s3Client.send(command);
     
     // Return the key for later retrieval
     return key;

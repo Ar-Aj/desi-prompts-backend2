@@ -179,7 +179,7 @@ router.post('/upload-image', asyncHandler(async (req: Request, res: Response) =>
         const imageUrl = await getSignedDownloadUrl(fileKey);
         
         // Verify the file was uploaded correctly
-        const fileExists = await checkFileExists(fileKey);
+        await checkFileExists(fileKey);
         
         res.json({
           success: true,
@@ -279,7 +279,7 @@ router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: Req
       const pdfUrl = await getSignedDownloadUrl(fileKey);
       
       // Verify the file was uploaded correctly
-      const fileExists = await checkFileExists(fileKey);
+      await checkFileExists(fileKey);
       
       res.json({
         success: true,
