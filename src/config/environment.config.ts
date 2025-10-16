@@ -37,7 +37,8 @@ interface EnvironmentConfig {
 }
 
 const getEnvironmentConfig = (): EnvironmentConfig => {
-  const mode = (process.env.MODE || 'development') as 'development' | 'production';
+  // Check both MODE and NODE_ENV for production detection
+  const mode = (process.env.MODE || process.env.NODE_ENV || 'development') as 'development' | 'production';
   const isProduction = mode === 'production';
   
   // Base configuration

@@ -11,6 +11,7 @@ import { SupportTicket } from '../models/SupportTicket.model';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorizeAdmin } from '../middleware/admin.middleware';
 import { asyncHandler } from '../middleware/asyncHandler.middleware';
+import { env } from '../config/environment.config';
 
 const router: express.Router = express.Router();
 
@@ -93,13 +94,31 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     
     const imageUrl = `/uploads/images/${req.file.filename}`;
     
-    // In production, use absolute URLs pointing to the backend server
-    // In development, use relative URLs
-    const isProduction = process.env.MODE === 'production';
-    // Use the same environment configuration as the rest of the app
-    const backendUrl = isProduction 
-      ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL || `https://desi-prompts-backend2-3.onrender.com`)
-      : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`);
+    // Use the same environment detection as the rest of the app
+    const isProduction = env.mode === 'production';
+    console.log('Image upload - Environment detection:', { 
+      mode: env.mode, 
+      isProduction 
+    });
+    
+    // Use the backend URL from environment config or fallback to request host
+    let backendUrl = isProduction 
+      ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL)
+      : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL);
+    
+    // If no backend URL is configured, try to infer it from the request
+    if (!backendUrl && req.get('host')) {
+      const protocol = req.secure || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+      backendUrl = `${protocol}://${req.get('host')}`;
+      console.log('Image upload - Inferred backend URL:', backendUrl);
+    }
+    
+    // Fallback to default
+    backendUrl = backendUrl || (isProduction 
+      ? `https://desi-prompts-backend2-3.onrender.com`
+      : `http://localhost:${process.env.PORT || 5000}`);
+    
+    console.log('Image upload - Backend URL configuration:', { backendUrl, isProduction });
     
     // Ensure backendUrl doesn't end with a slash
     const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
@@ -107,6 +126,8 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     const cleanImageUrl = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
     
     const fullImageUrl = isProduction ? `${cleanBackendUrl}${cleanImageUrl}` : cleanImageUrl;
+    
+    console.log('Image upload - Final URL:', { fullImageUrl, cleanImageUrl });
     
     res.json({
       success: true,
