@@ -36,6 +36,8 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
   const { items, guestEmail, guestName } = req.body;
   const userId = (req as any).user?._id;
 
+  console.log('Order creation request:', { items, guestEmail, guestName, userId });
+
   // Validate user or guest details
   if (!userId && (!guestEmail || !guestName)) {
     res.status(400).json({ 
@@ -46,13 +48,29 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
 
   // Fetch products and calculate total
   const productIds = items.map((item: any) => item.productId);
+  console.log('Requested product IDs:', productIds);
+  
   const products = await Product.find({ 
     _id: { $in: productIds },
     isActive: true 
   });
 
+  console.log('Found products:', products.map(p => ({ id: p._id, name: p.name, isActive: p.isActive })));
+
   if (products.length !== items.length) {
-    res.status(400).json({ error: 'Some products are not available' });
+    // More detailed error message for debugging
+    const foundIds = products.map(p => String(p._id));
+    const missingIds = productIds.filter((id: string) => !foundIds.includes(id));
+    console.error('Some products are not available:', { 
+      requested: productIds.length, 
+      found: products.length, 
+      missingIds 
+    });
+    
+    res.status(400).json({ 
+      error: 'Some products are not available',
+      details: `Missing products: ${missingIds.join(', ')}`
+    });
     return;
   }
 
