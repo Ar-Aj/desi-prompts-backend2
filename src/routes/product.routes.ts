@@ -6,6 +6,38 @@ import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 
 const router: Router = Router();
 
+// Get signed URL for S3 object (public endpoint)
+router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) => {
+  const { key } = req.query;
+  
+  if (!key || typeof key !== 'string') {
+    res.status(400).json({
+      success: false,
+      error: 'Missing or invalid key parameter'
+    });
+    return;
+  }
+
+  try {
+    // Import S3 utilities
+    const { getSignedDownloadUrl } = require('../utils/storage.utils');
+    
+    // Generate signed URL
+    const signedUrl = await getSignedDownloadUrl(key);
+    
+    res.json({
+      success: true,
+      signedUrl
+    });
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate signed URL'
+    });
+  }
+}));
+
 // Get all products (public)
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const {

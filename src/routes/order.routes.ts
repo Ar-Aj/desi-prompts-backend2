@@ -322,8 +322,8 @@ router.get('/:orderId/download/:productId', asyncHandler(async (req: Request, re
   
   if (isProduction) {
     // Production: Use S3 signed URL
-    // The product.pdfUrl should contain the full S3 URL
-    downloadUrl = product.pdfUrl;
+    // The product.pdfUrl should contain the S3 key
+    downloadUrl = await getSignedDownloadUrl(product.pdfUrl);
   } else {
     // Development: Use direct URL
     // The product.pdfUrl should contain the full local URL

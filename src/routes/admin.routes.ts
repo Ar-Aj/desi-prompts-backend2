@@ -75,6 +75,38 @@ const pdfUpload = multer({
 router.use(authenticate);
 router.use(authorizeAdmin);
 
+// Get signed URL for S3 object
+router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) => {
+  const { key } = req.query;
+  
+  if (!key || typeof key !== 'string') {
+    res.status(400).json({
+      success: false,
+      error: 'Missing or invalid key parameter'
+    });
+    return;
+  }
+
+  try {
+    // Import S3 utilities
+    const { getSignedDownloadUrl } = require('../utils/storage.utils');
+    
+    // Generate signed URL
+    const signedUrl = await getSignedDownloadUrl(key);
+    
+    res.json({
+      success: true,
+      signedUrl
+    });
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate signed URL'
+    });
+  }
+}));
+
 // Image upload endpoint
 router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
@@ -106,8 +138,9 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
       // Upload to S3
       await uploadFile(req.file.buffer, fileKey, req.file.mimetype);
       
-      // Generate public URL for the S3 image
-      const imageUrl = `${env.s3.endpoint}/${env.s3.bucketName}/${fileKey}`;
+      // Generate signed URL for the S3 image (needed for private buckets)
+      const { getSignedDownloadUrl } = require('../utils/storage.utils');
+      const imageUrl = await getSignedDownloadUrl(fileKey);
       
       console.log('Image uploaded to S3:', { imageUrl, fileKey });
       
@@ -203,8 +236,9 @@ router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: Req
       // Upload to S3
       await uploadFile(req.file.buffer, fileKey, 'application/pdf');
       
-      // Generate public URL for the S3 PDF
-      const pdfUrl = `${env.s3.endpoint}/${env.s3.bucketName}/${fileKey}`;
+      // Generate signed URL for the S3 PDF (needed for private buckets)
+      const { getSignedDownloadUrl } = require('../utils/storage.utils');
+      const pdfUrl = await getSignedDownloadUrl(fileKey);
       
       console.log('PDF uploaded to S3:', { pdfUrl, fileKey });
       
