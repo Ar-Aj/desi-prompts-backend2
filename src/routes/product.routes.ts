@@ -10,6 +10,8 @@ const router: Router = Router();
 router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) => {
   const { key } = req.query;
   
+  console.log('Get signed URL request:', { key });
+  
   if (!key || typeof key !== 'string') {
     res.status(400).json({
       success: false,
@@ -24,6 +26,8 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
     
     // Generate signed URL
     const signedUrl = await getSignedDownloadUrl(key);
+    
+    console.log('Generated signed URL:', { key, signedUrl });
     
     res.json({
       success: true,
