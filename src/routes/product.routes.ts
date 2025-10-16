@@ -3,14 +3,13 @@ import { Product } from '../models/Product.model';
 import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 
 const router: Router = Router();
 
 // Get signed URL for S3 object (public endpoint)
 router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) => {
   const { key } = req.query;
-  
-  console.log('Get signed URL request:', { key });
   
   if (!key || typeof key !== 'string') {
     res.status(400).json({
@@ -26,8 +25,6 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
     
     // Generate signed URL
     const signedUrl = await getSignedDownloadUrl(key);
-    
-    console.log('Generated signed URL:', { key, signedUrl });
     
     res.json({
       success: true,
@@ -46,8 +43,6 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) => {
   const fullKey = req.params.key + (req.params[0] || '');
   
-  console.log('Proxy S3 request:', { fullKey });
-  
   if (!fullKey) {
     res.status(400).json({
       success: false,
@@ -58,8 +53,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
 
   try {
     // Import S3 utilities
-    const { s3Client, GetObjectCommand } = require('../utils/storage.utils');
-    const { env } = require('../config/environment.config');
+    const { s3Client, env } = require('../utils/storage.utils');
     
     // Get the object from S3
     const command = new GetObjectCommand({
