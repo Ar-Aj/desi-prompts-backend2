@@ -106,12 +106,14 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
       // Upload to S3
       await uploadFile(req.file.buffer, fileKey, req.file.mimetype);
       
-      // Return only the key for storage in database
-      console.log('Image uploaded to S3:', { fileKey });
+      // Generate public URL for the S3 image
+      const imageUrl = `${env.s3.endpoint}/${env.s3.bucketName}/${fileKey}`;
+      
+      console.log('Image uploaded to S3:', { imageUrl, fileKey });
       
       res.json({
         success: true,
-        imageUrl: fileKey, // Store only the key in production
+        imageUrl,
         filename: req.file.originalname,
         fileKey
       });
@@ -201,12 +203,14 @@ router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: Req
       // Upload to S3
       await uploadFile(req.file.buffer, fileKey, 'application/pdf');
       
-      // Return only the key for storage in database
-      console.log('PDF uploaded to S3:', { fileKey });
+      // Generate public URL for the S3 PDF
+      const pdfUrl = `${env.s3.endpoint}/${env.s3.bucketName}/${fileKey}`;
+      
+      console.log('PDF uploaded to S3:', { pdfUrl, fileKey });
       
       res.json({
         success: true,
-        pdfUrl: fileKey, // Store only the key in production
+        pdfUrl,
         filename: req.file.originalname,
         fileKey
       });

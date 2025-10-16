@@ -3,7 +3,6 @@ import { Product } from '../models/Product.model';
 import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
-import { env } from '../config/environment.config';
 
 const router: Router = Router();
 
@@ -46,30 +45,8 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
     Product.countDocuments(query)
   ]);
 
-  // Process image URLs for both local and S3 storage
-  const isProduction = env.mode === 'production';
-  const processedProducts = products.map(product => {
-    const productObj = product.toObject();
-    
-    if (isProduction) {
-      // For production, convert S3 keys to full URLs
-      const processedImages = productObj.images.map(imageKey => {
-        // If it's already a full URL, return as is
-        if (imageKey.startsWith('http')) {
-          return imageKey;
-        }
-        // Otherwise, construct the full S3 URL
-        return `${env.s3.endpoint}/${env.s3.bucketName}/${imageKey}`;
-      });
-      
-      return {
-        ...productObj,
-        images: processedImages
-      };
-    }
-    // For development, URLs are already full URLs
-    return productObj;
-  });
+  // Convert to plain objects for response
+  const processedProducts = products.map(product => product.toObject());
 
   res.json({
     success: true,
@@ -107,37 +84,13 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
-  // Process image URLs for both local and S3 storage
-  const isProduction = env.mode === 'production';
-  const productObj = product.toObject();
-  
-  if (isProduction) {
-    // For production, convert S3 keys to full URLs
-    const processedImages = productObj.images.map(imageKey => {
-      // If it's already a full URL, return as is
-      if (imageKey.startsWith('http')) {
-        return imageKey;
-      }
-      // Otherwise, construct the full S3 URL
-      return `${env.s3.endpoint}/${env.s3.bucketName}/${imageKey}`;
-    });
-    
-    const processedProduct = {
-      ...productObj,
-      images: processedImages
-    };
-    
-    res.json({
-      success: true,
-      product: processedProduct
-    });
-  } else {
-    // For development, URLs are already full URLs
-    res.json({
-      success: true,
-      product: productObj
-    });
-  }
+  // Convert to plain object for response
+  const processedProduct = product.toObject();
+
+  res.json({
+    success: true,
+    product: processedProduct
+  });
 }));
 
 // Create product (admin only)
