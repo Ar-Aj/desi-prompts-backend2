@@ -96,7 +96,10 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
     // In production, use absolute URLs pointing to the backend server
     // In development, use relative URLs
     const isProduction = process.env.MODE === 'production';
-    const backendUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`;
+    // Use the same environment configuration as the rest of the app
+    const backendUrl = isProduction 
+      ? (process.env.BACKEND_URL_PROD || process.env.BACKEND_URL || `https://desi-prompts-backend2-3.onrender.com`)
+      : (process.env.BACKEND_URL_DEV || process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 5000}`);
     
     // Ensure backendUrl doesn't end with a slash
     const cleanBackendUrl = backendUrl.endsWith('/') ? backendUrl.slice(0, -1) : backendUrl;
