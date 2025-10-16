@@ -43,7 +43,7 @@ const seedAdmin = async () => {
     console.log('📧 Email: admin@indianpromptpack.com');
     console.log('🔑 Password: admin123');
     console.log('');
-    console.log('⚠️  IMPORTANT: Change this password after first login!');
+    console.log('⚠️  IMPORTANT: Change this password after first login if possible!');
     
   } catch (error) {
     console.error('❌ Error creating admin user:', error);
