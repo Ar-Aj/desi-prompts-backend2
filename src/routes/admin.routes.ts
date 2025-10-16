@@ -139,10 +139,12 @@ router.post('/upload-image', upload.single('image'), asyncHandler(async (req: Re
       await uploadFile(req.file.buffer, fileKey, req.file.mimetype);
       
       // Generate signed URL for the S3 image (needed for private buckets)
-      const { getSignedDownloadUrl } = require('../utils/storage.utils');
+      const { getSignedDownloadUrl, checkFileExists } = require('../utils/storage.utils');
       const imageUrl = await getSignedDownloadUrl(fileKey);
       
-      console.log('Image uploaded to S3:', { imageUrl, fileKey });
+      // Verify the file was uploaded correctly
+      const fileExists = await checkFileExists(fileKey);
+      console.log('Image upload verification:', { fileKey, fileExists, imageUrl });
       
       res.json({
         success: true,
@@ -237,10 +239,12 @@ router.post('/upload-pdf', pdfUpload.single('pdf'), asyncHandler(async (req: Req
       await uploadFile(req.file.buffer, fileKey, 'application/pdf');
       
       // Generate signed URL for the S3 PDF (needed for private buckets)
-      const { getSignedDownloadUrl } = require('../utils/storage.utils');
+      const { getSignedDownloadUrl, checkFileExists } = require('../utils/storage.utils');
       const pdfUrl = await getSignedDownloadUrl(fileKey);
       
-      console.log('PDF uploaded to S3:', { pdfUrl, fileKey });
+      // Verify the file was uploaded correctly
+      const fileExists = await checkFileExists(fileKey);
+      console.log('PDF upload verification:', { fileKey, fileExists, pdfUrl });
       
       res.json({
         success: true,

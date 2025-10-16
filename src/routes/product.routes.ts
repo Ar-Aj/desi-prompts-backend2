@@ -42,6 +42,52 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
   }
 }));
 
+// Proxy endpoint to serve S3 files directly (to avoid CORS issues)
+router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) => {
+  const fullKey = req.params.key + (req.params[0] || '');
+  
+  console.log('Proxy S3 request:', { fullKey });
+  
+  if (!fullKey) {
+    res.status(400).json({
+      success: false,
+      error: 'Missing key parameter'
+    });
+    return;
+  }
+
+  try {
+    // Import S3 utilities
+    const { s3Client, GetObjectCommand } = require('../utils/storage.utils');
+    const { env } = require('../config/environment.config');
+    
+    // Get the object from S3
+    const command = new GetObjectCommand({
+      Bucket: env.s3.bucketName!,
+      Key: fullKey
+    });
+    
+    const s3Response = await s3Client.send(command);
+    
+    // Set the appropriate headers
+    if (s3Response.ContentType) {
+      res.set('Content-Type', s3Response.ContentType);
+    }
+    if (s3Response.ContentLength) {
+      res.set('Content-Length', s3Response.ContentLength.toString());
+    }
+    
+    // Pipe the S3 response to the client
+    s3Response.Body.pipe(res);
+  } catch (error: any) {
+    console.error('Error proxying S3 file:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to proxy S3 file'
+    });
+  }
+}));
+
 // Get all products (public)
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const {
