@@ -10,3 +10,11 @@ services:
         value: production
       - key: MODE
         value: production
+      - key: BACKEND_URL
+        value: https://desi-prompts-backend2-3.onrender.com
+      - key: RAZORPAY_KEY_ID
+        value: rzp_live_your_key_id
+      - key: RAZORPAY_KEY_SECRET
+        value: your_key_secret
+      - key: RAZORPAY_WEBHOOK_SECRET
+        value: your_webhook_secret
