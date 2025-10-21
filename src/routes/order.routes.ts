@@ -133,8 +133,15 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
       totalAmount
     });
 
+    console.log('Order object before save:', JSON.stringify(order, null, 2));
+    
     await order.save();
     console.log('Order saved:', order._id);
+    console.log('Order after save:', {
+      id: order._id,
+      orderNumber: order.orderNumber,
+      purchaseId: order.purchaseId
+    });
 
     // Create Razorpay order (if Razorpay is configured)
     let razorpayOrder;
@@ -165,12 +172,23 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
         razorpayKeyId: process.env.RAZORPAY_KEY_ID
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Order creation failed:', error);
-    res.status(500).json({
-      error: 'Failed to create order',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
+    if (error.name === 'ValidationError') {
+      console.error('Validation errors:', error.errors);
+      res.status(400).json({
+        error: 'Order validation failed',
+        details: Object.keys(error.errors).map(key => ({
+          field: key,
+          message: error.errors[key].message
+        }))
+      });
+    } else {
+      res.status(500).json({
+        error: 'Failed to create order',
+        details: error.message || 'Unknown error'
+      });
+    }
   }
 }));
 

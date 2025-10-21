@@ -56,12 +56,10 @@ const orderItemSchema = new Schema<IOrderItem>({
 const orderSchema = new Schema<IOrder>(
   {
     orderNumber: {
-      type: String,
-      required: true
+      type: String
     },
     purchaseId: {
-      type: String,
-      required: true
+      type: String
     },
     user: {
       type: Schema.Types.ObjectId,
@@ -119,7 +117,7 @@ const orderSchema = new Schema<IOrder>(
 );
 
 // Generate order number and purchase ID
-orderSchema.pre('save', async function(next) {
+orderSchema.pre('validate', function(next) {
   if (!this.orderNumber) {
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -140,13 +138,24 @@ orderSchema.pre('save', async function(next) {
   next();
 });
 
-// Validate that either user or guest details are provided
-orderSchema.pre('save', function(next) {
+// Validate that required fields are present
+orderSchema.pre('validate', function(next) {
+  if (!this.orderNumber) {
+    next(new Error('Order number is required'));
+    return;
+  }
+  
+  if (!this.purchaseId) {
+    next(new Error('Purchase ID is required'));
+    return;
+  }
+  
   if (!this.user && (!this.guestEmail || !this.guestName)) {
     next(new Error('Either user or guest details must be provided'));
-  } else {
-    next();
+    return;
   }
+  
+  next();
 });
 
 // Indexes
