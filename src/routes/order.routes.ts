@@ -33,101 +33,145 @@ router.get('/check-discount', asyncHandler(async (req: Request, res: Response) =
 
 // Create order
 router.post('/create', asyncHandler(async (req: Request, res: Response) => {
-  const { items, guestEmail, guestName } = req.body;
-  const userId = (req as any).user?._id;
-
-  console.log('Order creation request:', { items, guestEmail, guestName, userId });
-
-  // Validate user or guest details
-  if (!userId && (!guestEmail || !guestName)) {
-    res.status(400).json({ 
-      error: 'Please provide guest details or login to continue' 
-    });
-    return;
-  }
-
-  // Fetch products and calculate total
-  const productIds = items.map((item: any) => item.productId);
-  console.log('Requested product IDs:', productIds);
-  
-  const products = await Product.find({ 
-    _id: { $in: productIds },
-    isActive: true 
-  });
-
-  console.log('Found products:', products.map(p => ({ id: p._id, name: p.name, isActive: p.isActive })));
-
-  if (products.length !== items.length) {
-    // More detailed error message for debugging
-    const foundIds = products.map(p => String(p._id));
-    const missingIds = productIds.filter((id: string) => !foundIds.includes(id));
-    console.error('Some products are not available:', { 
-      requested: productIds.length, 
-      found: products.length, 
-      missingIds 
-    });
-    
-    res.status(400).json({ 
-      error: 'Some products are not available',
-      details: `Missing products: ${missingIds.join(', ')}`
-    });
-    return;
-  }
-
-  let totalAmount = 0;
-  const orderItems = items.map((item: any) => {
-    const product = products.find(p => (p._id as any).toString() === item.productId);
-    if (!product) throw new Error('Product not found');
-    
-    totalAmount += product.price * item.quantity;
-    
-    return {
-      product: product._id,
-      name: product.name,
-      price: product.price,
-      quantity: item.quantity
-    };
-  });
-
-  // Create order
-  const order = new Order({
-    user: userId,
-    guestEmail: !userId ? guestEmail : undefined,
-    guestName: !userId ? guestName : undefined,
-    items: orderItems,
-    totalAmount
-  });
-
-  await order.save();
-
-  // Create Razorpay order (if Razorpay is configured)
-  let razorpayOrder;
   try {
-    razorpayOrder = await createRazorpayOrder(
-      totalAmount,
-      'INR',
-      order.orderNumber
-    );
-    
-    order.razorpayOrderId = razorpayOrder.id;
-    await order.save();
-  } catch (error) {
-    console.error('Razorpay order creation failed:', error);
-    // If Razorpay fails, we'll still create the order but without Razorpay integration
-    // This allows for manual payment processing
-    console.log('Proceeding with order creation without Razorpay integration');
-  }
+    const { items, guestEmail, guestName } = req.body;
+    const userId = (req as any).user?._id;
 
-  res.status(201).json({
-    success: true,
-    order: {
-      id: order._id,
-      orderNumber: order.orderNumber,
-      totalAmount: order.totalAmount,
-      razorpayOrderId: razorpayOrder?.id,
-      razorpayKeyId: process.env.RAZORPAY_KEY_ID
+    console.log('Order creation request:', { items, guestEmail, guestName, userId });
+
+    // Validate user or guest details
+    if (!userId && (!guestEmail || !guestName)) {
+      console.log('Validation failed: Missing guest details or user ID');
+      res.status(400).json({ 
+        error: 'Please provide guest details or login to continue' 
+      });
+      return;
     }
-  });
+
+    // Validate items
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      console.log('Validation failed: No items provided');
+      res.status(400).json({ 
+        error: 'Please provide at least one item' 
+      });
+      return;
+    }
+
+    // Validate each item
+    for (const item of items) {
+      if (!item.productId) {
+        console.log('Validation failed: Missing productId in item', item);
+        res.status(400).json({ 
+          error: 'Each item must have a productId' 
+        });
+        return;
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        console.log('Validation failed: Invalid quantity in item', item);
+        res.status(400).json({ 
+          error: 'Each item must have a valid quantity' 
+        });
+        return;
+      }
+    }
+
+    // Fetch products and calculate total
+    const productIds = items.map((item: any) => item.productId);
+    console.log('Requested product IDs:', productIds);
+    
+    const products = await Product.find({ 
+      _id: { $in: productIds },
+      isActive: true 
+    });
+
+    console.log('Found products:', products.map(p => ({ id: p._id, name: p.name, isActive: p.isActive })));
+
+    if (products.length !== items.length) {
+      // More detailed error message for debugging
+      const foundIds = products.map(p => String(p._id));
+      const missingIds = productIds.filter((id: string) => !foundIds.includes(id));
+      console.error('Some products are not available:', { 
+        requested: productIds.length, 
+        found: products.length, 
+        missingIds 
+      });
+      
+      res.status(400).json({ 
+        error: 'Some products are not available',
+        details: `Missing products: ${missingIds.join(', ')}`
+      });
+      return;
+    }
+
+    let totalAmount = 0;
+    const orderItems = items.map((item: any) => {
+      const product = products.find(p => (p._id as any).toString() === item.productId);
+      if (!product) {
+        console.error('Product not found in products array:', item.productId);
+        throw new Error('Product not found');
+      }
+      
+      totalAmount += product.price * item.quantity;
+      
+      return {
+        product: product._id,
+        name: product.name,
+        price: product.price,
+        quantity: item.quantity
+      };
+    });
+
+    console.log('Order items:', orderItems);
+    console.log('Total amount:', totalAmount);
+
+    // Create order
+    const order = new Order({
+      user: userId,
+      guestEmail: !userId ? guestEmail : undefined,
+      guestName: !userId ? guestName : undefined,
+      items: orderItems,
+      totalAmount
+    });
+
+    await order.save();
+    console.log('Order saved:', order._id);
+
+    // Create Razorpay order (if Razorpay is configured)
+    let razorpayOrder;
+    try {
+      razorpayOrder = await createRazorpayOrder(
+        totalAmount,
+        'INR',
+        order.orderNumber
+      );
+      
+      order.razorpayOrderId = razorpayOrder.id;
+      await order.save();
+      console.log('Razorpay order created:', razorpayOrder.id);
+    } catch (error) {
+      console.error('Razorpay order creation failed:', error);
+      // If Razorpay fails, we'll still create the order but without Razorpay integration
+      // This allows for manual payment processing
+      console.log('Proceeding with order creation without Razorpay integration');
+    }
+
+    res.status(201).json({
+      success: true,
+      order: {
+        id: order._id,
+        orderNumber: order.orderNumber,
+        totalAmount: order.totalAmount,
+        razorpayOrderId: razorpayOrder?.id,
+        razorpayKeyId: process.env.RAZORPAY_KEY_ID
+      }
+    });
+  } catch (error) {
+    console.error('Order creation failed:', error);
+    res.status(500).json({
+      error: 'Failed to create order',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 }));
 
 // Verify payment

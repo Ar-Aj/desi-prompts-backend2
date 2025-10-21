@@ -45,7 +45,10 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) => {
   const fullKey = req.params.key + (req.params[0] || '');
   
+  console.log('S3 Proxy Request:', { fullKey, params: req.params });
+  
   if (!fullKey) {
+    console.log('Missing key parameter');
     res.status(400).json({
       success: false,
       error: 'Missing key parameter'
@@ -60,7 +63,27 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       Key: fullKey
     });
     
+    console.log('S3 GetObjectCommand:', { 
+      bucket: env.s3.bucketName, 
+      key: fullKey 
+    });
+    
     const s3Response = await s3Client.send(command);
+    console.log('S3 Response received:', { 
+      contentType: s3Response.ContentType,
+      contentLength: s3Response.ContentLength,
+      statusCode: s3Response.$metadata?.httpStatusCode
+    });
+    
+    // Check if the file actually exists and has content
+    if (!s3Response.Body || s3Response.ContentLength === 0) {
+      console.log('S3 file not found or empty:', fullKey);
+      res.status(404).json({
+        success: false,
+        error: 'File not found or is empty'
+      });
+      return;
+    }
     
     // Set the appropriate headers
     if (s3Response.ContentType) {
@@ -81,6 +104,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       // @ts-ignore - Handle S3 stream response
       s3Response.Body.pipe(res);
     } else {
+      console.log('S3 file not found:', fullKey);
       res.status(404).json({
         success: false,
         error: 'File not found'
@@ -94,10 +118,17 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
         success: false,
         error: 'File not found'
       });
+    } else if (error.name === 'Forbidden') {
+      res.status(403).json({
+        success: false,
+        error: 'Access denied to S3 file',
+        details: error.message
+      });
     } else {
       res.status(500).json({
         success: false,
-        error: 'Failed to proxy S3 file'
+        error: 'Failed to proxy S3 file',
+        details: error.message
       });
     }
   }
