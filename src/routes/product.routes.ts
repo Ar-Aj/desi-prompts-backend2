@@ -70,15 +70,51 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
     if (s3Response.ContentLength) {
       res.set('Content-Length', s3Response.ContentLength.toString());
     }
+    if (s3Response.CacheControl) {
+      res.set('Cache-Control', s3Response.CacheControl);
+    }
+    if (s3Response.ETag) {
+      res.set('ETag', s3Response.ETag);
+    }
     
-    // Pipe the S3 response to the client
-    s3Response.Body.pipe(res);
+    // Handle the response body properly
+    if (s3Response.Body) {
+      // Check if it's a stream (Readable)
+      if (s3Response.Body.on && s3Response.Body.pipe) {
+        s3Response.Body.on('error', (err: Error) => {
+          console.error('S3 stream error:', err);
+          if (!res.headersSent) {
+            res.status(500).json({
+              success: false,
+              error: 'Error reading file from S3'
+            });
+          }
+        });
+        s3Response.Body.pipe(res);
+      } else {
+        // If it's a buffer or string, send it directly
+        res.send(s3Response.Body);
+      }
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    }
   } catch (error: any) {
     console.error('Error proxying S3 file:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to proxy S3 file'
-    });
+    // Handle specific S3 errors
+    if (error.name === 'NoSuchKey') {
+      res.status(404).json({
+        success: false,
+        error: 'File not found'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to proxy S3 file'
+      });
+    }
   }
 }));
 
