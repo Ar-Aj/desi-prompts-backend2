@@ -4,6 +4,8 @@ import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client } from '../utils/storage.utils';
+import { env } from '../config/environment.config';
 
 const router: Router = Router();
 
@@ -52,9 +54,6 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    // Import S3 utilities
-    const { s3Client, env } = require('../utils/storage.utils');
-    
     // Get the object from S3
     const command = new GetObjectCommand({
       Bucket: env.s3.bucketName!,
@@ -79,22 +78,8 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
     
     // Handle the response body properly
     if (s3Response.Body) {
-      // Check if it's a stream (Readable)
-      if (s3Response.Body.on && s3Response.Body.pipe) {
-        s3Response.Body.on('error', (err: Error) => {
-          console.error('S3 stream error:', err);
-          if (!res.headersSent) {
-            res.status(500).json({
-              success: false,
-              error: 'Error reading file from S3'
-            });
-          }
-        });
-        s3Response.Body.pipe(res);
-      } else {
-        // If it's a buffer or string, send it directly
-        res.send(s3Response.Body);
-      }
+      // @ts-ignore - Handle S3 stream response
+      s3Response.Body.pipe(res);
     } else {
       res.status(404).json({
         success: false,
