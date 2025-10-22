@@ -7,6 +7,7 @@ import { checkFirstTimeDiscount } from '../utils/discount.utils';
 import { sendEmail, getOrderConfirmationEmail } from '../utils/email.utils';
 import { getSignedDownloadUrl } from '../utils/storage.utils';
 import { createRazorpayOrder } from '../utils/payment.utils';
+import { env } from '../config/environment.config';
 
 const router: express.Router = express.Router();
 
@@ -309,7 +310,17 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       const customerEmail = order.guestEmail || (req as any).user?.email;
       const customerName = order.guestName || (req as any).user?.name;
       
-      console.log('Sending email to:', customerEmail);
+      console.log('Email details:', {
+        to: customerEmail,
+        from: env.email.from,
+        subject: `Order Confirmation - ${order.orderNumber}`,
+        customerName: customerName || 'Customer',
+        orderNumber: order.orderNumber,
+        purchaseId: order.purchaseId,
+        totalAmount: order.totalAmount,
+        pdfPassword: firstProduct.pdfPassword ? '***PROVIDED***' : 'MISSING',
+        downloadLink: downloadLink ? '***GENERATED***' : 'MISSING'
+      });
 
       if (customerEmail) {
         await sendEmail({

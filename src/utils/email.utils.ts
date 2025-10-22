@@ -23,29 +23,52 @@ interface EmailOptions {
 
 export const sendEmail = async (options: EmailOptions) => {
   try {
+    console.log('Email sending attempt:', {
+      to: options.to,
+      subject: options.subject,
+      hasResend: !!resend,
+      nodeEnv: process.env.NODE_ENV,
+      emailFrom: env.email.from,
+      isProduction: process.env.NODE_ENV === 'production'
+    });
+    
     if (resend && process.env.NODE_ENV === 'production') {
       // Use Resend in production
-      await resend.emails.send({
-        from: env.email.from!,
-        to: options.to,
-        subject: options.subject,
-        html: options.html
-      });
+      console.log('Sending email via Resend...');
+      try {
+        const result = await resend.emails.send({
+          from: env.email.from!,
+          to: options.to,
+          subject: options.subject,
+          html: options.html
+        });
+        console.log('Resend email sent successfully:', result);
+        console.log('Check Resend dashboard for delivery status: https://resend.com/emails');
+      } catch (resendError) {
+        console.error('Resend API error:', resendError);
+        throw resendError;
+      }
     } else {
       // Use nodemailer in development
-      await transporter.sendMail({
+      console.log('Sending email via nodemailer (development fallback)...');
+      const result = await transporter.sendMail({
         from: env.email.from || 'noreply@indianpromptpack.com',
         to: options.to,
         subject: options.subject,
         html: options.html,
         attachments: options.attachments
       });
+      console.log('Nodemailer email sent successfully:', result);
     }
 
     console.log(`Email sent to ${options.to}`);
     return true;
   } catch (error) {
     console.error('Email sending failed:', error);
+    // Log additional error details
+    if (error && typeof error === 'object') {
+      console.error('Error details:', JSON.stringify(error, null, 2));
+    }
     throw error;
   }
 };
