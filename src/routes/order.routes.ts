@@ -197,11 +197,17 @@ router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Resp
 router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   console.log('Payment verification request received:', req.body);
   
-  // Fix: Handle both razorpayOrderId and orderId from frontend
-  const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderId } = req.body;
+  // Fix: Handle all possible parameter names from frontend
+  const { 
+    razorpayOrderId, 
+    razorpayPaymentId, 
+    razorpaySignature, 
+    orderId,
+    order_id // Handle different naming conventions
+  } = req.body;
   
-  // Use orderId if razorpayOrderId is not provided (for manual verification)
-  const searchOrderId = razorpayOrderId || orderId;
+  // Use the first available order ID parameter
+  const searchOrderId = razorpayOrderId || orderId || order_id;
 
   // Find order
   console.log('Looking for order with orderId:', searchOrderId);

@@ -56,27 +56,24 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
     return;
   }
 
-  // Validate that the key looks like a valid S3 key
+  // Handle files without folder prefixes by adding a default folder
+  let processedKey = fullKey;
   if (!fullKey.includes('/') || fullKey.startsWith('/')) {
-    console.log('Invalid S3 key format:', fullKey);
-    res.status(400).json({
-      success: false,
-      error: 'Invalid S3 key format',
-      key: fullKey
-    });
-    return;
+    // If the key doesn't have a folder prefix, add 'images/' prefix
+    processedKey = fullKey.startsWith('/') ? `images${fullKey}` : `images/${fullKey}`;
+    console.log('Processed key for file without folder prefix:', { original: fullKey, processed: processedKey });
   }
   
   try {
     // Get the object from S3
     const command = new GetObjectCommand({
       Bucket: env.s3.bucketName!,
-      Key: fullKey
+      Key: processedKey
     });
     
     console.log('S3 GetObjectCommand:', { 
       bucket: env.s3.bucketName, 
-      key: fullKey 
+      key: processedKey 
     });
     
     const s3Response = await s3Client.send(command);
@@ -88,11 +85,11 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
     
     // Check if the file actually exists and has content
     if (!s3Response.Body || s3Response.ContentLength === 0) {
-      console.log('S3 file not found or empty:', fullKey);
+      console.log('S3 file not found or empty:', processedKey);
       res.status(404).json({
         success: false,
         error: 'File not found or is empty',
-        key: fullKey
+        key: processedKey
       });
       return;
     }
@@ -116,11 +113,11 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       // @ts-ignore - Handle S3 stream response
       s3Response.Body.pipe(res);
     } else {
-      console.log('S3 file not found:', fullKey);
+      console.log('S3 file not found:', processedKey);
       res.status(404).json({
         success: false,
         error: 'File not found',
-        key: fullKey
+        key: processedKey
       });
     }
   } catch (error: any) {
@@ -131,7 +128,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
         success: false,
         error: 'File not found in S3 bucket',
         details: error.message,
-        key: fullKey,
+        key: processedKey,
         bucket: env.s3.bucketName
       });
     } else if (error.name === 'Forbidden') {
@@ -139,7 +136,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
         success: false,
         error: 'Access denied to S3 file - check bucket permissions',
         details: error.message,
-        key: fullKey,
+        key: processedKey,
         bucket: env.s3.bucketName
       });
     } else if (error.name === 'NoSuchBucket') {
@@ -155,7 +152,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
         success: false,
         error: 'Failed to proxy S3 file - internal server error',
         details: error.message,
-        key: fullKey,
+        key: processedKey,
         bucket: env.s3.bucketName
       });
     }
