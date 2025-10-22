@@ -45,7 +45,7 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) => {
   const fullKey = req.params.key + (req.params[0] || '');
   
-  console.log('S3 Proxy Request:', { fullKey, params: req.params });
+  console.log('S3 Proxy Request:', { fullKey, params: req.params, url: req.url });
   
   if (!fullKey) {
     console.log('Missing key parameter');
@@ -56,6 +56,17 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
     return;
   }
 
+  // Validate that the key looks like a valid S3 key
+  if (!fullKey.includes('/') || fullKey.startsWith('/')) {
+    console.log('Invalid S3 key format:', fullKey);
+    res.status(400).json({
+      success: false,
+      error: 'Invalid S3 key format',
+      key: fullKey
+    });
+    return;
+  }
+  
   try {
     // Get the object from S3
     const command = new GetObjectCommand({
@@ -80,7 +91,8 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       console.log('S3 file not found or empty:', fullKey);
       res.status(404).json({
         success: false,
-        error: 'File not found or is empty'
+        error: 'File not found or is empty',
+        key: fullKey
       });
       return;
     }
@@ -107,7 +119,8 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       console.log('S3 file not found:', fullKey);
       res.status(404).json({
         success: false,
-        error: 'File not found'
+        error: 'File not found',
+        key: fullKey
       });
     }
   } catch (error: any) {
@@ -116,19 +129,34 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
     if (error.name === 'NoSuchKey') {
       res.status(404).json({
         success: false,
-        error: 'File not found'
+        error: 'File not found in S3 bucket',
+        details: error.message,
+        key: fullKey,
+        bucket: env.s3.bucketName
       });
     } else if (error.name === 'Forbidden') {
       res.status(403).json({
         success: false,
-        error: 'Access denied to S3 file',
-        details: error.message
+        error: 'Access denied to S3 file - check bucket permissions',
+        details: error.message,
+        key: fullKey,
+        bucket: env.s3.bucketName
+      });
+    } else if (error.name === 'NoSuchBucket') {
+      res.status(404).json({
+        success: false,
+        error: 'S3 bucket not found - check bucket name and region',
+        details: error.message,
+        bucket: env.s3.bucketName,
+        region: env.s3.region
       });
     } else {
       res.status(500).json({
         success: false,
-        error: 'Failed to proxy S3 file',
-        details: error.message
+        error: 'Failed to proxy S3 file - internal server error',
+        details: error.message,
+        key: fullKey,
+        bucket: env.s3.bucketName
       });
     }
   }

@@ -135,7 +135,7 @@ async function handlePaymentCaptured(payment: any) {
           html: getOrderConfirmationEmail(
             customerName,
             order.orderNumber,
-            (order._id as any).toString(),
+            order.purchaseId, // Fix: Use purchaseId instead of order ID
             products,
             order.totalAmount,
             firstProduct.pdfPassword,

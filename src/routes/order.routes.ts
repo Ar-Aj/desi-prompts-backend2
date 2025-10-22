@@ -196,30 +196,50 @@ router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Resp
 
 // Verify payment
 router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+  console.log('Payment verification request received:', req.body);
+  
+  // Fix: Handle both razorpayOrderId and orderId from frontend
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderId } = req.body;
+  
+  // Use orderId if razorpayOrderId is not provided (for manual verification)
+  const searchOrderId = razorpayOrderId || orderId;
 
   // Find order
-  const order = await Order.findOne({ razorpayOrderId }).populate('items.product');
+  console.log('Looking for order with orderId:', searchOrderId);
+  const order = await Order.findById(searchOrderId).populate('items.product');
   if (!order) {
+    console.log('Order not found for orderId:', searchOrderId);
     res.status(404).json({ error: 'Order not found' });
     return;
   }
 
+  console.log('Order found:', {
+    id: order._id,
+    orderNumber: order.orderNumber,
+    razorpayOrderId: order.razorpayOrderId,
+    paymentStatus: order.paymentStatus
+  });
+
   // If no Razorpay integration, mark as completed manually
   if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    console.log('Manual payment verification');
     // For manual verification or testing without Razorpay
     order.paymentStatus = 'completed';
     order.razorpayPaymentId = 'manual_' + Date.now();
     order.razorpaySignature = 'manual_signature';
     await order.save();
   } else {
-    // Verify signature (simplified for now)
-    const isValid = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
-      .update(razorpayOrderId + '|' + razorpayPaymentId)
-      .digest('hex') === razorpaySignature;
+    console.log('Verifying Razorpay signature');
+    // Verify signature using the proper utility function
+    const { verifyRazorpaySignature } = require('../utils/payment.utils');
+    const isValid = verifyRazorpaySignature(
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature
+    );
 
     if (!isValid) {
+      console.log('Payment verification failed - invalid signature');
       order.paymentStatus = 'failed';
       await order.save();
       res.status(400).json({ error: 'Payment verification failed' });
@@ -227,6 +247,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     }
 
     // Update order
+    console.log('Payment verified successfully');
     order.paymentStatus = 'completed';
     order.razorpayPaymentId = razorpayPaymentId;
     order.razorpaySignature = razorpaySignature;
@@ -234,6 +255,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
   }
 
   // Update product sales count (both total and real)
+  console.log('Updating product sales count');
   for (const item of order.items) {
     await Product.findByIdAndUpdate(item.product, {
       $inc: { 
@@ -245,6 +267,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
 
   // Send confirmation email with PDF links
   try {
+    console.log('Preparing to send confirmation email');
     const products = order.items.map((item: any) => ({
       name: item.name,
       price: item.price
@@ -253,30 +276,40 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     // Get the first product's PDF for now (in real app, you'd handle multiple PDFs)
     const firstProduct = await Product.findById(order.items[0].product);
     if (firstProduct) {
+      console.log('Generating download link for product:', firstProduct._id);
       const downloadLink = await getSignedDownloadUrl(firstProduct.pdfUrl);
       
       const customerEmail = order.guestEmail || (req as any).user?.email;
       const customerName = order.guestName || (req as any).user?.name;
+      
+      console.log('Sending email to:', customerEmail);
 
-      await sendEmail({
-        to: customerEmail,
-        subject: `Order Confirmation - ${order.orderNumber}`,
-        html: getOrderConfirmationEmail(
-          customerName,
-          order.orderNumber,
-          (order._id as any).toString(),
-          products,
-          order.totalAmount,
-          firstProduct.pdfPassword,
-          downloadLink
-        )
-      });
+      if (customerEmail) {
+        await sendEmail({
+          to: customerEmail,
+          subject: `Order Confirmation - ${order.orderNumber}`,
+          html: getOrderConfirmationEmail(
+            customerName || 'Customer',
+            order.orderNumber,
+            order.purchaseId, // Fix: Use purchaseId instead of order ID
+            products,
+            order.totalAmount,
+            firstProduct.pdfPassword,
+            downloadLink
+          )
+        });
 
-      order.emailSent = true;
-      order.emailSentAt = new Date();
-      order.pdfDelivered = true;
-      order.pdfDeliveredAt = new Date();
-      await order.save();
+        order.emailSent = true;
+        order.emailSentAt = new Date();
+        order.pdfDelivered = true;
+        order.pdfDeliveredAt = new Date();
+        await order.save();
+        console.log('Order confirmation email sent successfully');
+      } else {
+        console.log('No customer email found, skipping email send');
+      }
+    } else {
+      console.log('No product found for order item, skipping email send');
     }
   } catch (error) {
     console.error('Email sending failed:', error);
