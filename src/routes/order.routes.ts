@@ -352,6 +352,9 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     }
   } catch (error) {
     console.error('Email sending failed:', error);
+    // Even if email fails, we still want to mark the order as successful
+    // The user can use the resend email feature
+    console.log('Continuing with order completion despite email failure');
   }
 
   res.json({
@@ -417,12 +420,101 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
   });
 }));
 
+// Resend order confirmation email
+router.post('/:id/resend-email', authenticate, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const orderId = req.params.id;
+    const order = await Order.findById(orderId).populate('items.product');
+    
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+
+    // Check authorization
+    if (order.user?.toString() !== (req as any).user._id.toString()) {
+      res.status(403).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Check if order is completed
+    if (order.paymentStatus !== 'completed') {
+      res.status(400).json({ error: 'Order not completed' });
+      return;
+    }
+
+    // Get the first product's PDF for now (in real app, you'd handle multiple PDFs)
+    const firstProduct = await Product.findById(order.items[0].product);
+    if (!firstProduct) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+
+    const products = order.items.map((item: any) => ({
+      name: item.name,
+      price: item.price
+    }));
+
+    const downloadLink = await getSignedDownloadUrl(firstProduct.pdfUrl);
+    
+    const customerEmail = order.guestEmail || (req as any).user?.email;
+    const customerName = order.guestName || (req as any).user?.name;
+    
+    if (!customerEmail) {
+      res.status(400).json({ error: 'No email address found for customer' });
+      return;
+    }
+
+    await sendEmail({
+      to: customerEmail,
+      subject: `Order Confirmation - ${order.orderNumber}`,
+      html: getOrderConfirmationEmail(
+        customerName || 'Customer',
+        order.orderNumber,
+        order.purchaseId,
+        products,
+        order.totalAmount,
+        firstProduct.pdfPassword,
+        downloadLink
+      )
+    });
+
+    order.emailSent = true;
+    order.emailSentAt = new Date();
+    // Only update pdfDelivered if it wasn't already delivered
+    if (!order.pdfDelivered) {
+      order.pdfDelivered = true;
+      order.pdfDeliveredAt = new Date();
+    }
+    await order.save();
+
+    res.json({
+      success: true,
+      message: 'Order confirmation email resent successfully'
+    });
+  } catch (error) {
+    console.error('Failed to resend email:', error);
+    res.status(500).json({ 
+      error: 'Failed to resend email', 
+      details: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+}));
+
 // Get download link for purchased product
 router.get('/:orderId/download/:productId', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+  console.log('Download request received:', { 
+    orderId: req.params.orderId, 
+    productId: req.params.productId,
+    userId: (req as any).user?._id,
+    query: req.query
+  });
+
   const { orderId, productId } = req.params;
 
   const order = await Order.findById(orderId);
   if (!order || order.paymentStatus !== 'completed') {
+    console.log('Order not found or not completed:', { orderId, paymentStatus: order?.paymentStatus });
     res.status(404).json({ error: 'Order not found or payment not completed' });
     return;
   }
@@ -432,6 +524,7 @@ router.get('/:orderId/download/:productId', optionalAuth, asyncHandler(async (re
     item.product.toString() === productId
   );
   if (!orderItem) {
+    console.log('Product not found in order:', { orderId, productId });
     res.status(404).json({ error: 'Product not found in order' });
     return;
   }
@@ -442,12 +535,21 @@ router.get('/:orderId/download/:productId', optionalAuth, asyncHandler(async (re
     (order.guestEmail && req.query.guestEmail === order.guestEmail);
 
   if (!isAuthorized) {
+    console.log('Unauthorized download attempt:', { 
+      orderId, 
+      productId, 
+      userId: (req as any).user?._id,
+      orderUser: order.user,
+      guestEmail: order.guestEmail,
+      queryEmail: req.query.guestEmail
+    });
     res.status(403).json({ error: 'Unauthorized' });
     return;
   }
 
   const product = await Product.findById(productId);
   if (!product) {
+    console.log('Product not found:', { productId });
     res.status(404).json({ error: 'Product not found' });
     return;
   }
@@ -456,14 +558,29 @@ router.get('/:orderId/download/:productId', optionalAuth, asyncHandler(async (re
   let downloadUrl;
   const isProduction = process.env.MODE === 'production' || process.env.NODE_ENV === 'production';
   
+  console.log('Generating download URL:', { 
+    isProduction, 
+    pdfUrl: product.pdfUrl,
+    product: product._id
+  });
+  
   if (isProduction) {
     // Production: Use S3 signed URL
     // The product.pdfUrl should contain the S3 key
     downloadUrl = await getSignedDownloadUrl(product.pdfUrl);
+    console.log('Generated S3 signed URL:', downloadUrl);
   } else {
     // Development: Use direct URL
     // The product.pdfUrl should contain the full local URL
     downloadUrl = product.pdfUrl;
+    console.log('Using local URL:', downloadUrl);
+  }
+
+  // Fix: Ensure we always return a proper response
+  if (!downloadUrl) {
+    console.error('Failed to generate download URL for product:', productId);
+    res.status(500).json({ error: 'Failed to generate download link' });
+    return;
   }
 
   res.json({

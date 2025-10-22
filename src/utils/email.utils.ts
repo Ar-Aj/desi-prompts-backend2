@@ -44,8 +44,14 @@ export const sendEmail = async (options: EmailOptions) => {
         });
         console.log('Resend email sent successfully:', result);
         console.log('Check Resend dashboard for delivery status: https://resend.com/emails');
-      } catch (resendError) {
+        return true;
+      } catch (resendError: any) {
         console.error('Resend API error:', resendError);
+        // Handle specific Resend errors
+        if (resendError?.statusCode === 403 && resendError?.message?.includes('domain is not verified')) {
+          console.error('DOMAIN VERIFICATION ERROR: Please verify your domain in the Resend dashboard');
+          console.error('Visit: https://resend.com/domains to verify desiprompts.in');
+        }
         throw resendError;
       }
     } else {
@@ -59,10 +65,8 @@ export const sendEmail = async (options: EmailOptions) => {
         attachments: options.attachments
       });
       console.log('Nodemailer email sent successfully:', result);
+      return true;
     }
-
-    console.log(`Email sent to ${options.to}`);
-    return true;
   } catch (error) {
     console.error('Email sending failed:', error);
     // Log additional error details

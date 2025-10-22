@@ -64,6 +64,16 @@ export const getSignedDownloadUrl = async (
       return keyOrUrl;
     }
     
+    // Validate that we have a key
+    if (!keyOrUrl || keyOrUrl.trim() === '') {
+      throw new Error('Invalid S3 key provided');
+    }
+    
+    // Validate that we have S3 configuration
+    if (!env.s3.bucketName) {
+      throw new Error('S3 bucket name not configured');
+    }
+    
     // Otherwise, treat it as a key and generate a signed URL
     const command = new GetObjectCommand({
       Bucket: env.s3.bucketName!,
@@ -71,10 +81,15 @@ export const getSignedDownloadUrl = async (
     });
 
     const url = await getSignedUrl(s3Client, command, { expiresIn });
+    console.log('Successfully generated signed URL for key:', keyOrUrl);
     return url;
   } catch (error) {
-    console.error('Error generating signed URL:', error);
-    throw new Error('Failed to generate download link');
+    console.error('Error generating signed URL for key:', keyOrUrl, error);
+    // Provide a more detailed error message
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate download link: ${error.message}`);
+    }
+    throw new Error('Failed to generate download link due to unknown error');
   }
 };
 
