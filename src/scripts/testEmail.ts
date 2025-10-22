@@ -1,4 +1,4 @@
-import { sendEmail, getOrderConfirmationEmail } from '../utils/email.utils';
+import { sendEmail } from '../utils/email.utils';
 
 async function testEmail() {
   try {

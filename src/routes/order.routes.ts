@@ -3,7 +3,6 @@ import { Order } from '../models/Order.model';
 import { Product } from '../models/Product.model';
 import { authenticate, optionalAuth } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
-import crypto from 'crypto';
 import { checkFirstTimeDiscount } from '../utils/discount.utils';
 import { sendEmail, getOrderConfirmationEmail } from '../utils/email.utils';
 import { getSignedDownloadUrl } from '../utils/storage.utils';
