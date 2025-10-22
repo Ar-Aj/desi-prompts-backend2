@@ -195,7 +195,20 @@ router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Resp
 
 // Verify payment
 router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
-  console.log('Payment verification request received:', req.body);
+  console.log('=== PAYMENT VERIFICATION DEBUG INFO ===');
+  console.log('Raw request body:', req.body);
+  console.log('Request headers:', req.headers);
+  console.log('Content-Type header:', req.headers['content-type']);
+  console.log('Request method:', req.method);
+  console.log('Request URL:', req.url);
+  console.log('Full request keys:', Object.keys(req));
+  console.log('Has body parser:', !!req.body);
+  if (req.body) {
+    console.log('Body type:', typeof req.body);
+    console.log('Body keys:', Object.keys(req.body));
+    console.log('Body stringified:', JSON.stringify(req.body));
+  }
+  console.log('=== END DEBUG INFO ===');
   
   // Fix: Handle all possible parameter names from frontend
   const { 
@@ -208,6 +221,15 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
   
   // Use the first available order ID parameter
   const searchOrderId = razorpayOrderId || orderId || order_id;
+
+  console.log('Extracted parameters:', {
+    razorpayOrderId,
+    razorpayPaymentId,
+    razorpaySignature,
+    orderId,
+    order_id,
+    searchOrderId
+  });
 
   // Find order
   console.log('Looking for order with orderId:', searchOrderId);
