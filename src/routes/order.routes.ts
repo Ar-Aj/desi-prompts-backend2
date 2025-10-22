@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { Order } from '../models/Order.model';
 import { Product } from '../models/Product.model';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, optionalAuth } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import crypto from 'crypto';
 import { checkFirstTimeDiscount } from '../utils/discount.utils';
@@ -12,8 +12,9 @@ import { createRazorpayOrder } from '../utils/payment.utils';
 const router: express.Router = express.Router();
 
 // Check first-time discount eligibility
-router.get('/check-discount', asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.query.userId as string;
+router.get('/check-discount', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+  // Get user ID from authenticated request if available
+  const userId = (req as any).user?._id;
   const guestEmail = req.query.guestEmail as string;
 
   try {
@@ -31,10 +32,11 @@ router.get('/check-discount', asyncHandler(async (req: Request, res: Response) =
   }
 }));
 
-// Create order
-router.post('/create', asyncHandler(async (req: Request, res: Response) => {
+// Create order - Use optionalAuth to allow both guest and authenticated users
+router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { items, guestEmail, guestName } = req.body;
+    // Get user ID from authenticated request if available
     const userId = (req as any).user?._id;
 
     console.log('Order creation request:', { items, guestEmail, guestName, userId });
@@ -126,9 +128,9 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
 
     // Create order
     const order = new Order({
-      user: userId,
-      guestEmail: !userId ? guestEmail : undefined,
-      guestName: !userId ? guestName : undefined,
+      user: userId, // This will be set if user is authenticated
+      guestEmail: !userId ? guestEmail : undefined, // Only set for guest orders
+      guestName: !userId ? guestName : undefined, // Only set for guest orders
       items: orderItems,
       totalAmount
     });
@@ -193,7 +195,7 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 // Verify payment
-router.post('/verify-payment', asyncHandler(async (req: Request, res: Response) => {
+router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
 
   // Find order
@@ -318,7 +320,7 @@ router.get('/my-orders', authenticate, asyncHandler(async (req: Request, res: Re
 }));
 
 // Get order by ID
-router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const order = await Order.findById(req.params.id)
     .populate('items.product', 'name slug images');
 
@@ -330,7 +332,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   // Check authorization
   const isAuthorized = 
     (order.user && order.user.toString() === (req as any).user?._id?.toString()) ||
-    (order.guestEmail && req.body.guestEmail === order.guestEmail);
+    (order.guestEmail && req.query.guestEmail === order.guestEmail);
 
   if (!isAuthorized && (req as any).user?.role !== 'admin') {
     res.status(403).json({ error: 'Unauthorized' });
@@ -344,7 +346,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 // Get download link for purchased product
-router.get('/:orderId/download/:productId', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:orderId/download/:productId', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const { orderId, productId } = req.params;
 
   const order = await Order.findById(orderId);
@@ -365,7 +367,7 @@ router.get('/:orderId/download/:productId', asyncHandler(async (req: Request, re
   // Check authorization
   const isAuthorized = 
     (order.user && order.user.toString() === (req as any).user?._id?.toString()) ||
-    (order.guestEmail && req.body.guestEmail === order.guestEmail);
+    (order.guestEmail && req.query.guestEmail === order.guestEmail);
 
   if (!isAuthorized) {
     res.status(403).json({ error: 'Unauthorized' });
