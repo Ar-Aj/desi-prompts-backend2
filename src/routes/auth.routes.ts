@@ -60,7 +60,7 @@ router.post('/login', validate(loginSchema), asyncHandler(async (req: Request, r
   // Find user
   const user = await User.findOne({ email });
   if (!user) {
-    res.status(401).json({ error: 'Invalid credentials' });
+    res.status(401).json({ error: 'Invalid credentials ' });
     return;
   }
 
