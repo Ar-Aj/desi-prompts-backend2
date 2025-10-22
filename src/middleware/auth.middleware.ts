@@ -1,6 +1,7 @@
+import * as jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { User } from '../models/User.model';
+
 import { env } from '../config/environment.config';
 
 export interface AuthRequest extends Request {

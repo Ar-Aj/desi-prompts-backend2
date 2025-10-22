@@ -1,5 +1,5 @@
 import { Resend } from 'resend';
-import nodemailer from 'nodemailer';
+import * as nodemailer from 'nodemailer';
 import { env } from '../config/environment.config';
 
 const resend = env.email.resendApiKey ? new Resend(env.email.resendApiKey) : null;

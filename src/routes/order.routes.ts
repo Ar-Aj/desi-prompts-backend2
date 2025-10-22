@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import * as express from 'express';
+import { Request, Response } from 'express';
 import { Order } from '../models/Order.model';
 import { Product } from '../models/Product.model';
 import { authenticate, optionalAuth } from '../middleware/auth.middleware';
