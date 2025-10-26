@@ -371,7 +371,7 @@ router.get('/categories/list', asyncHandler(async (_req: Request, res: Response)
 router.get('/admin/all', authenticate, authorizeAdmin, asyncHandler(async (_req: Request, res: Response) => {
   const products = await Product.find({})
     .sort({ order: 1, createdAt: -1 })
-    .select('name description price originalPrice category isActive salesCount averageRating order createdAt');
+    .select('name description price originalPrice category subcategory isActive salesCount averageRating order createdAt');
 
   res.json({
     success: true,
