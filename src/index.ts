@@ -14,6 +14,7 @@ import reviewRoutes from './routes/review.routes';
 import supportRoutes from './routes/support.routes';
 import adminRoutes from './routes/admin.routes';
 import webhookRoutes from './routes/webhook.routes';
+import subscriberRoutes from './routes/subscriber.routes';
 
 // Import middleware
 import { errorHandler } from './middleware/error.middleware';
@@ -115,6 +116,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/subscribers', subscriberRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
