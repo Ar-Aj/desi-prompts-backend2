@@ -6,6 +6,7 @@ export interface IProduct extends Document {
   description: string;
   detailedDescription: string;
   category: string;
+  subcategory: 'image' | 'writing'; // New field for subcategories
   price: number;
   originalPrice: number;
   images: string[];
@@ -63,6 +64,11 @@ const productSchema = new Schema<IProduct>(
     }],
     category: {
       type: String,
+      required: true
+    },
+    subcategory: {
+      type: String,
+      enum: ['image', 'writing'],
       required: true
     },
     tags: [{
@@ -136,6 +142,7 @@ productSchema.pre(['updateOne', 'findOneAndUpdate'], function(next) {
 // Index for search and performance
 productSchema.index({ slug: 1 }, { unique: true });
 productSchema.index({ category: 1 });
+productSchema.index({ subcategory: 1 });
 productSchema.index({ tags: 1 });
 productSchema.index({ isActive: 1, order: 1 });
 productSchema.index({ createdAt: -1 });

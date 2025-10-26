@@ -163,6 +163,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const {
     category,
+    subcategory, // Add subcategory filter
     search,
     minPrice,
     maxPrice,
@@ -174,6 +175,7 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
 
   // Filters
   if (category) query.category = category;
+  if (subcategory) query.subcategory = subcategory; // Add subcategory filter
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
