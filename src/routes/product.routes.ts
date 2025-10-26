@@ -263,13 +263,47 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
 
 // Create product (admin only)
 router.post('/', authenticate, authorizeAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const product = new Product(req.body);
-  await product.save();
+  try {
+    console.log('Product creation request body:', req.body);
+    
+    // Log specific fields
+    console.log('Required fields check:', {
+      name: req.body.name,
+      category: req.body.category,
+      subcategory: req.body.subcategory,
+      price: req.body.price,
+      description: req.body.description,
+      detailedDescription: req.body.detailedDescription,
+      pdfUrl: req.body.pdfUrl,
+      pdfPassword: req.body.pdfPassword
+    });
+    
+    const product = new Product(req.body);
+    await product.save();
 
-  res.status(201).json({
-    success: true,
-    product
-  });
+    res.status(201).json({
+      success: true,
+      product
+    });
+  } catch (error: any) {
+    console.error('Product creation error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map((err: any) => err.message);
+      res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details: messages
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to create product'
+    });
+  }
 }));
 
 // Update product (admin only)
