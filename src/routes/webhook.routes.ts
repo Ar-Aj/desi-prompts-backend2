@@ -4,7 +4,6 @@ import { Product } from '../models/Product.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { verifyWebhookSignature } from '../utils/payment.utils';
 import { sendEmail, getOrderConfirmationEmail } from '../utils/email.utils';
-import { getSignedDownloadUrl } from '../utils/storage.utils';
 
 const router: Router = Router();
 
@@ -124,7 +123,6 @@ async function handlePaymentCaptured(payment: any) {
 
       const firstProduct = await Product.findById(order.items[0].product);
       if (firstProduct) {
-        const downloadLink = await getSignedDownloadUrl(firstProduct.pdfUrl);
         
         const customerEmail = payment.email || order.guestEmail;
         const customerName = order.guestName || 'Customer';
@@ -138,8 +136,7 @@ async function handlePaymentCaptured(payment: any) {
             order.purchaseId, // Fix: Use purchaseId instead of order ID
             products,
             order.totalAmount,
-            firstProduct.pdfPassword,
-            downloadLink
+            firstProduct.pdfPassword
           )
         });
 

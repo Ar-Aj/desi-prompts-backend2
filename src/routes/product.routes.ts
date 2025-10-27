@@ -1,10 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { Product } from '../models/Product.model';
+import { Order } from '../models/Order.model';
 import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../utils/storage.utils';
+import { getSignedDownloadUrl } from '../utils/storage.utils';
 import { env } from '../config/environment.config';
 
 const router: Router = Router();
@@ -37,6 +39,183 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
     res.status(500).json({
       success: false,
       error: 'Failed to generate signed URL'
+    });
+  }
+}));
+
+// Verify PDF access endpoint
+router.post('/verify-access', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { orderId, accessToken, pdfPassword } = req.body;
+
+    console.log('PDF Access Verification Request:', { orderId, hasAccessToken: !!accessToken, hasPdfPassword: !!pdfPassword });
+
+    // Validate parameters
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Order ID is required'
+      });
+    }
+
+    if (!accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Access Token is required'
+      });
+    }
+
+    if (!pdfPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'PDF Password is required'
+      });
+    }
+
+    // Find order by ID
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+
+    // Check if order is completed
+    if (order.paymentStatus !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        error: 'Order not completed'
+      });
+    }
+
+    // Verify access token (in a real implementation, this would be stored in the database)
+    // For now, we'll generate a token and store it temporarily
+    // In production, you'd want to store this in the order document
+    if (!order.accessToken || order.accessToken !== accessToken) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid Access Token'
+      });
+    }
+
+    // Get the first product (for now, handle single product orders)
+    const firstItem = order.items[0];
+    const product = await Product.findById(firstItem.product);
+    
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
+
+    // Verify PDF password
+    if (product.pdfPassword !== pdfPassword) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid PDF Password'
+      });
+    }
+
+    // Generate signed URL for PDF
+    const pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
+
+    // Log access
+    console.log('PDF access granted for:', {
+      orderId,
+      productId: product._id,
+      productName: product.name
+    });
+
+    return res.json({
+      success: true,
+      pdfUrl,
+      message: 'Access granted'
+    });
+  } catch (error) {
+    console.error('PDF Access Verification Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to verify access'
+    });
+  }
+}));
+
+// PDF Viewer Route - Secure PDF access with purchase verification
+router.get('/view-pdf/:purchaseId', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { purchaseId } = req.params;
+    const { password } = req.query;
+
+    console.log('PDF Viewer Request:', { purchaseId, hasPassword: !!password });
+
+    // Validate parameters
+    if (!purchaseId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Purchase ID is required'
+      });
+    }
+
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'PDF password is required'
+      });
+    }
+
+    // Find order by purchaseId
+    const order = await Order.findOne({ purchaseId });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+
+    // Check if order is completed
+    if (order.paymentStatus !== 'completed') {
+      return res.status(400).json({
+        success: false,
+        error: 'Order not completed'
+      });
+    }
+
+    // Get the first product (for now, handle single product orders)
+    const firstItem = order.items[0];
+    const product = await Product.findById(firstItem.product);
+    
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
+
+    // Verify PDF password
+    if (product.pdfPassword !== password) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid PDF password'
+      });
+    }
+
+    // Log access
+    console.log('PDF access granted for:', {
+      purchaseId,
+      productId: product._id,
+      productName: product.name
+    });
+
+    // Redirect to the PDF proxy endpoint with proper authentication
+    const proxyUrl = `/api/products/proxy-s3/${product.pdfUrl}`;
+    return res.redirect(302, proxyUrl);
+  } catch (error) {
+    console.error('PDF Viewer Error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to access PDF'
     });
   }
 }));

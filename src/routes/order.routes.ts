@@ -133,7 +133,8 @@ router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Resp
       guestEmail: !userId ? guestEmail : undefined, // Only set for guest orders
       guestName: !userId ? guestName : undefined, // Only set for guest orders
       items: orderItems,
-      totalAmount
+      totalAmount,
+      accessToken: require('crypto').randomBytes(32).toString('hex') // Generate access token
     });
 
     console.log('Order object before save:', JSON.stringify(order, null, 2));
@@ -333,8 +334,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
             order.purchaseId, // Fix: Use purchaseId instead of order ID
             products,
             order.totalAmount,
-            firstProduct.pdfPassword,
-            downloadLink
+            firstProduct.pdfPassword
           )
         });
 
@@ -455,8 +455,6 @@ router.post('/:id/resend-email', authenticate, asyncHandler(async (req: Request,
       price: item.price
     }));
 
-    const downloadLink = await getSignedDownloadUrl(firstProduct.pdfUrl);
-    
     const customerEmail = order.guestEmail || (req as any).user?.email;
     const customerName = order.guestName || (req as any).user?.name;
     
@@ -474,8 +472,7 @@ router.post('/:id/resend-email', authenticate, asyncHandler(async (req: Request,
         order.purchaseId,
         products,
         order.totalAmount,
-        firstProduct.pdfPassword,
-        downloadLink
+        firstProduct.pdfPassword
       )
     });
 

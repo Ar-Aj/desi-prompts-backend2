@@ -83,8 +83,7 @@ export const getOrderConfirmationEmail = (
   purchaseId: string,
   products: Array<{ name: string; price: number }>,
   totalAmount: number,
-  pdfPassword: string,
-  downloadLink: string
+  pdfPassword: string
 ) => {
   const productsList = products
     .map(p => `<li>${p.name} - ₹${p.price.toLocaleString('en-IN')}</li>`)
@@ -136,8 +135,8 @@ export const getOrderConfirmationEmail = (
           </div>
           
           <div style="text-align: center;">
-            <a href="${downloadLink}" class="download-btn">Download Your Prompt Pack</a>
-            <p style="font-size: 12px; color: #888;">This link will expire in 30 minutes</p>
+            <a href="${env.frontendUrl}/pdf-viewer?purchaseId=${purchaseId}" class="download-btn">Access Your Prompt Pack</a>
+            <p style="font-size: 12px; color: #888;">Secure access to your prompt pack - no expiration!</p>
           </div>
           
           <p style="margin-top: 30px;">If you have any questions or issues regarding your purchase, please contact our support team and provide your <strong>Purchase ID: ${purchaseId}</strong> for faster assistance.</p>
