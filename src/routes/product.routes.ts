@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Product } from '../models/Product.model';
 import { Order } from '../models/Order.model';
 import { Demo } from '../models/Demo.model';
+import { AccessLog } from '../models/AccessManager.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -47,11 +48,25 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 router.post('/verify-access', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { orderId, accessToken } = req.body;
+    const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+    const userAgent = req.get('User-Agent') || 'unknown';
 
     console.log('PDF Access Verification Request:', { orderId, hasAccessToken: !!accessToken });
 
     // Validate parameters
     if (!orderId) {
+      // Log failed access attempt
+      await AccessLog.create({
+        orderId: null,
+        productId: null,
+        accessToken: accessToken || 'none',
+        ipAddress,
+        userAgent,
+        accessGranted: false,
+        failureReason: 'Order ID is required',
+        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      });
+
       return res.status(400).json({
         success: false,
         error: 'Order ID is required'
@@ -59,6 +74,18 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     }
 
     if (!accessToken) {
+      // Log failed access attempt
+      await AccessLog.create({
+        orderId,
+        productId: null,
+        accessToken: 'none',
+        ipAddress,
+        userAgent,
+        accessGranted: false,
+        failureReason: 'Access Token is required',
+        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      });
+
       return res.status(400).json({
         success: false,
         error: 'Access Token is required'
@@ -68,6 +95,18 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     // Find order by ID
     const order = await Order.findById(orderId);
     if (!order) {
+      // Log failed access attempt
+      await AccessLog.create({
+        orderId,
+        productId: null,
+        accessToken,
+        ipAddress,
+        userAgent,
+        accessGranted: false,
+        failureReason: 'Order not found',
+        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      });
+
       return res.status(404).json({
         success: false,
         error: 'Order not found'
@@ -76,6 +115,18 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
 
     // Check if order is completed
     if (order.paymentStatus !== 'completed') {
+      // Log failed access attempt
+      await AccessLog.create({
+        orderId,
+        productId: null,
+        accessToken,
+        ipAddress,
+        userAgent,
+        accessGranted: false,
+        failureReason: 'Order not completed',
+        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      });
+
       return res.status(400).json({
         success: false,
         error: 'Order not completed'
@@ -84,6 +135,18 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
 
     // Verify access token
     if (!order.accessToken || order.accessToken !== accessToken) {
+      // Log failed access attempt
+      await AccessLog.create({
+        orderId,
+        productId: null,
+        accessToken,
+        ipAddress,
+        userAgent,
+        accessGranted: false,
+        failureReason: 'Invalid Access Token',
+        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      });
+
       return res.status(401).json({
         success: false,
         error: 'Invalid Access Token'
@@ -95,14 +158,41 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     const product = await Product.findById(firstItem.product);
     
     if (!product) {
+      // Log failed access attempt
+      await AccessLog.create({
+        orderId,
+        productId: firstItem.product,
+        accessToken,
+        ipAddress,
+        userAgent,
+        accessGranted: false,
+        failureReason: 'Product not found',
+        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      });
+
       return res.status(404).json({
         success: false,
         error: 'Product not found'
       });
     }
 
-    // Generate signed URL for PDF
+    // Generate signed URL for PDF (30 minutes expiry)
     const pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
+    const expiryTime = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes from now
+
+    // Log successful access attempt
+    await AccessLog.create({
+      orderId,
+      productId: product._id,
+      userId: order.user,
+      guestEmail: order.guestEmail,
+      accessToken,
+      ipAddress,
+      userAgent,
+      accessGranted: true,
+      pdfUrl,
+      expiryTime
+    });
 
     // Log access
     console.log('PDF access granted for:', {
@@ -119,6 +209,26 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     });
   } catch (error) {
     console.error('PDF Access Verification Error:', error);
+    
+    // Log failed access attempt due to system error
+    try {
+      const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+      const userAgent = req.get('User-Agent') || 'unknown';
+      
+      await AccessLog.create({
+        orderId: req.body?.orderId,
+        productId: null,
+        accessToken: req.body?.accessToken,
+        ipAddress,
+        userAgent,
+        accessGranted: false,
+        failureReason: 'System error: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      });
+    } catch (logError) {
+      console.error('Failed to log access attempt:', logError);
+    }
+    
     return res.status(500).json({
       success: false,
       error: 'Failed to verify access'

@@ -59,8 +59,30 @@ export const getSignedDownloadUrl = async (
   expiresIn: number = 1800 // 30 minutes default
 ): Promise<string> => {
   try {
-    // If it's already a full URL, return as is
+    // If it's already a full URL, check if it's an S3 URL or a local URL
     if (keyOrUrl.startsWith('http')) {
+      // If it's an S3 URL with query parameters (signed URL), extract the key
+      if (keyOrUrl.includes('amazonaws.com') && keyOrUrl.includes('?')) {
+        // Extract the key from the URL path
+        const urlObj = new URL(keyOrUrl);
+        const pathParts = urlObj.pathname.split('/');
+        // Remove the bucket name from the path (first part after splitting)
+        // The path starts with '/', so pathParts[0] is empty, pathParts[1] is the bucket name
+        const key = pathParts.slice(2).join('/'); // Skip empty string and bucket name
+        console.log('Extracted S3 key from signed URL:', key);
+        
+        // Generate a new signed URL with the extracted key
+        const command = new GetObjectCommand({
+          Bucket: env.s3.bucketName!,
+          Key: key
+        });
+        
+        const url = await getSignedUrl(s3Client, command, { expiresIn });
+        console.log('Successfully generated new signed URL for key:', key);
+        return url;
+      }
+      
+      // For other URLs (local files, external links), return as is
       return keyOrUrl;
     }
     
