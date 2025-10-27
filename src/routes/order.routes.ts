@@ -332,6 +332,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
             customerName || 'Customer',
             order.orderNumber,
             order.purchaseId, // Fix: Use purchaseId instead of order ID
+            order.accessToken || 'N/A',
             products,
             order.totalAmount,
             firstProduct.pdfPassword
@@ -470,6 +471,7 @@ router.post('/:id/resend-email', authenticate, asyncHandler(async (req: Request,
         customerName || 'Customer',
         order.orderNumber,
         order.purchaseId,
+        order.accessToken || 'N/A',
         products,
         order.totalAmount,
         firstProduct.pdfPassword

@@ -134,6 +134,7 @@ async function handlePaymentCaptured(payment: any) {
             customerName,
             order.orderNumber,
             order.purchaseId, // Fix: Use purchaseId instead of order ID
+            order.accessToken || 'N/A',
             products,
             order.totalAmount,
             firstProduct.pdfPassword

@@ -81,6 +81,7 @@ export const getOrderConfirmationEmail = (
   customerName: string,
   orderNumber: string,
   purchaseId: string,
+  accessToken: string,
   products: Array<{ name: string; price: number }>,
   totalAmount: number,
   pdfPassword: string
@@ -101,7 +102,7 @@ export const getOrderConfirmationEmail = (
         .content { padding: 40px 30px; }
         .order-box { background-color: #1F2023; border: 1px solid #D4AF37; border-radius: 8px; padding: 20px; margin: 20px 0; }
         .password-box { background-color: #244c37; border: 2px solid #D4AF37; border-radius: 8px; padding: 20px; margin: 30px 0; text-align: center; }
-        .password { font-size: 24px; font-weight: bold; color: #D4AF37; letter-spacing: 2px; margin: 10px 0; }
+        .access-token { font-size: 16px; font-weight: bold; color: #D4AF37; letter-spacing: 1px; margin: 10px 0; word-break: break-all; }
         .download-btn { display: inline-block; background-color: #D4AF37; color: #191A1D; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
         .footer { background-color: #18181B; padding: 20px; text-align: center; color: #888; font-size: 12px; }
         ul { list-style: none; padding: 0; }
@@ -128,14 +129,17 @@ export const getOrderConfirmationEmail = (
           </div>
           
           <div class="password-box">
-            <h3 style="color: #ffffff;">Your PDF Password</h3>
-            <p style="color: #cccccc;">Use this password to unlock your prompt pack:</p>
-            <div class="password">${pdfPassword}</div>
-            <p style="color: #cccccc; font-size: 12px;">Please save this password securely</p>
+            <h3 style="color: #ffffff;">Secure Access Credentials</h3>
+            <p style="color: #cccccc;">Use these credentials to access your prompt pack:</p>
+            <p style="color: #cccccc; margin: 10px 0 5px 0;"><strong>Access Token:</strong></p>
+            <div class="access-token">${accessToken}</div>
+            <p style="color: #cccccc; margin: 15px 0 5px 0;"><strong>PDF Password:</strong></p>
+            <div class="access-token">${pdfPassword}</div>
+            <p style="color: #cccccc; font-size: 12px; margin-top: 15px;">Save these credentials securely - you'll need them to access your download</p>
           </div>
           
           <div style="text-align: center;">
-            <a href="${env.frontendUrl}/pdf-viewer?purchaseId=${purchaseId}" class="download-btn">Access Your Prompt Pack</a>
+            <a href="${env.frontendUrl}/pdf-viewer?orderId=${purchaseId}" class="download-btn">Access Your Prompt Pack</a>
             <p style="font-size: 12px; color: #888;">Secure access to your prompt pack - no expiration!</p>
           </div>
           

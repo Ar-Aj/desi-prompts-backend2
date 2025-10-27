@@ -46,9 +46,9 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 // Verify PDF access endpoint
 router.post('/verify-access', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { orderId, accessToken, pdfPassword } = req.body;
+    const { orderId, accessToken } = req.body;
 
-    console.log('PDF Access Verification Request:', { orderId, hasAccessToken: !!accessToken, hasPdfPassword: !!pdfPassword });
+    console.log('PDF Access Verification Request:', { orderId, hasAccessToken: !!accessToken });
 
     // Validate parameters
     if (!orderId) {
@@ -62,13 +62,6 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       return res.status(400).json({
         success: false,
         error: 'Access Token is required'
-      });
-    }
-
-    if (!pdfPassword) {
-      return res.status(400).json({
-        success: false,
-        error: 'PDF Password is required'
       });
     }
 
@@ -89,9 +82,7 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       });
     }
 
-    // Verify access token (in a real implementation, this would be stored in the database)
-    // For now, we'll generate a token and store it temporarily
-    // In production, you'd want to store this in the order document
+    // Verify access token
     if (!order.accessToken || order.accessToken !== accessToken) {
       return res.status(401).json({
         success: false,
@@ -110,14 +101,6 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       });
     }
 
-    // Verify PDF password
-    if (product.pdfPassword !== pdfPassword) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid PDF Password'
-      });
-    }
-
     // Generate signed URL for PDF
     const pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
 
@@ -131,6 +114,7 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     return res.json({
       success: true,
       pdfUrl,
+      pdfPassword: product.pdfPassword,
       message: 'Access granted'
     });
   } catch (error) {
