@@ -1,8 +1,8 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IAccessLog extends Document {
-  orderId: mongoose.Types.ObjectId;
-  productId: mongoose.Types.ObjectId;
+  orderId?: mongoose.Types.ObjectId;
+  productId?: mongoose.Types.ObjectId;
   userId?: mongoose.Types.ObjectId;
   guestEmail?: string;
   accessToken: string;
@@ -20,12 +20,12 @@ const accessLogSchema = new Schema<IAccessLog>(
     orderId: {
       type: Schema.Types.ObjectId,
       ref: 'Order',
-      required: true
+      required: false
     },
     productId: {
       type: Schema.Types.ObjectId,
       ref: 'Product',
-      required: true
+      required: false
     },
     userId: {
       type: Schema.Types.ObjectId,
