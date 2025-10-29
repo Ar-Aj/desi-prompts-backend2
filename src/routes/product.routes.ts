@@ -45,241 +45,277 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 }));
 
 // Verify PDF access endpoint
-router.post('/verify-access', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    // Ensure we always return JSON
-    res.setHeader('Content-Type', 'application/json');
-    
-    const { orderId, accessToken } = req.body;
-    const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
-    const userAgent = req.get('User-Agent') || 'unknown';
-
-    console.log('PDF Access Verification Request:', { orderId, hasAccessToken: !!accessToken });
-
-    // Validate parameters
-    if (!orderId) {
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: null,
-          productId: null,
-          accessToken: accessToken || 'none',
-          ipAddress,
-          userAgent,
-          accessGranted: false,
-          failureReason: 'Order ID is required',
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-
-      return res.status(400).json({
-        success: false,
-        error: 'Order ID is required'
-      });
-    }
-
-    if (!accessToken) {
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId,
-          productId: null,
-          accessToken: 'none',
-          ipAddress,
-          userAgent,
-          accessGranted: false,
-          failureReason: 'Access Token is required',
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-
-      return res.status(400).json({
-        success: false,
-        error: 'Access Token is required'
-      });
-    }
-
-    // Find order by ID or purchaseId
-    // The frontend might be sending purchaseId instead of the database _id
-    let order = await Order.findById(orderId);
-    
-    // If not found by _id, try to find by purchaseId
-    if (!order) {
-      console.log('Order not found by _id, trying purchaseId:', orderId);
-      order = await Order.findOne({ purchaseId: orderId });
-    }
-    
-    if (!order) {
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId,
-          productId: null,
-          accessToken,
-          ipAddress,
-          userAgent,
-          accessGranted: false,
-          failureReason: 'Order not found',
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-
-      return res.status(404).json({
-        success: false,
-        error: 'Order not found'
-      });
-    }
-
-    // Check if order is completed
-    if (order.paymentStatus !== 'completed') {
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: order._id, // Use the actual order ID
-          productId: null,
-          accessToken,
-          ipAddress,
-          userAgent,
-          accessGranted: false,
-          failureReason: 'Order not completed',
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-
-      return res.status(400).json({
-        success: false,
-        error: 'Order not completed'
-      });
-    }
-
-    // Verify access token
-    if (!order.accessToken || order.accessToken !== accessToken) {
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: order._id, // Use the actual order ID
-          productId: null,
-          accessToken,
-          ipAddress,
-          userAgent,
-          accessGranted: false,
-          failureReason: 'Invalid Access Token',
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid Access Token'
-      });
-    }
-
-    // Get the first product (for now, handle single product orders)
-    const firstItem = order.items[0];
-    const product = await Product.findById(firstItem.product);
-    
-    if (!product) {
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: order._id, // Use the actual order ID
-          productId: firstItem.product,
-          accessToken,
-          ipAddress,
-          userAgent,
-          accessGranted: false,
-          failureReason: 'Product not found',
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-
-      return res.status(404).json({
-        success: false,
-        error: 'Product not found'
-      });
-    }
-
-    // Generate signed URL for PDF (30 minutes expiry)
-    const pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
-    const expiryTime = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes from now
-
-    // Log successful access attempt
+router.post('/verify-access', (req: Request, res: Response) => {
+  // Wrap the async function to ensure we catch any errors and return JSON
+  (async () => {
     try {
-      await AccessLog.create({
-        orderId: order._id, // Use the actual order ID
-        productId: product._id,
-        userId: order.user,
-        guestEmail: order.guestEmail,
-        accessToken,
-        ipAddress,
-        userAgent,
-        accessGranted: true,
-        pdfUrl,
-        expiryTime
-      });
-    } catch (logError) {
-      console.error('Failed to log access attempt:', logError);
-    }
-
-    // Log access
-    console.log('PDF access granted for:', {
-      orderId: order._id,
-      purchaseId: order.purchaseId,
-      productId: product._id,
-      productName: product.name
-    });
-
-    return res.json({
-      success: true,
-      pdfUrl,
-      pdfPassword: product.pdfPassword,
-      message: 'Access granted'
-    });
-  } catch (error) {
-    console.error('PDF Access Verification Error:', error);
-    
-    // Ensure we always return JSON even in error cases
-    res.setHeader('Content-Type', 'application/json');
-    
-    // Log failed access attempt due to system error
-    try {
+      console.log('=== PDF ACCESS VERIFICATION START ===');
+      console.log('Request body:', req.body);
+      console.log('Request headers:', req.headers);
+      
+      // Ensure we always return JSON
+      res.setHeader('Content-Type', 'application/json');
+      
+      const { orderId, accessToken } = req.body;
       const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
       const userAgent = req.get('User-Agent') || 'unknown';
+
+      console.log('PDF Access Verification Request:', { orderId, hasAccessToken: !!accessToken });
+
+      // Validate parameters
+      if (!orderId) {
+        console.log('Validation failed: Order ID is required');
+        // Log failed access attempt
+        try {
+          await AccessLog.create({
+            orderId: null,
+            productId: null,
+            accessToken: accessToken || 'none',
+            ipAddress,
+            userAgent,
+            accessGranted: false,
+            failureReason: 'Order ID is required',
+            expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+          });
+        } catch (logError) {
+          console.error('Failed to log access attempt:', logError);
+        }
+
+        return res.status(400).json({
+          success: false,
+          error: 'Order ID is required'
+        });
+      }
+
+      if (!accessToken) {
+        console.log('Validation failed: Access Token is required');
+        // Log failed access attempt
+        try {
+          await AccessLog.create({
+            orderId,
+            productId: null,
+            accessToken: 'none',
+            ipAddress,
+            userAgent,
+            accessGranted: false,
+            failureReason: 'Access Token is required',
+            expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+          });
+        } catch (logError) {
+          console.error('Failed to log access attempt:', logError);
+        }
+
+        return res.status(400).json({
+          success: false,
+          error: 'Access Token is required'
+        });
+      }
+
+      // Find order by ID or purchaseId
+      // The frontend might be sending purchaseId instead of the database _id
+      console.log('Searching for order with ID:', orderId);
+      let order = await Order.findById(orderId);
       
-      await AccessLog.create({
-        orderId: req.body?.orderId,
-        productId: null,
-        accessToken: req.body?.accessToken,
-        ipAddress,
-        userAgent,
-        accessGranted: false,
-        failureReason: 'System error: ' + (error instanceof Error ? error.message : 'Unknown error'),
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+      // If not found by _id, try to find by purchaseId
+      if (!order) {
+        console.log('Order not found by _id, trying purchaseId:', orderId);
+        order = await Order.findOne({ purchaseId: orderId });
+      }
+      
+      if (!order) {
+        console.log('Order not found with either _id or purchaseId:', orderId);
+        // Log failed access attempt
+        try {
+          await AccessLog.create({
+            orderId,
+            productId: null,
+            accessToken,
+            ipAddress,
+            userAgent,
+            accessGranted: false,
+            failureReason: 'Order not found',
+            expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+          });
+        } catch (logError) {
+          console.error('Failed to log access attempt:', logError);
+        }
+
+        return res.status(404).json({
+          success: false,
+          error: 'Order not found'
+        });
+      }
+
+      console.log('Order found:', {
+        id: order._id,
+        purchaseId: order.purchaseId,
+        paymentStatus: order.paymentStatus
       });
-    } catch (logError) {
-      console.error('Failed to log access attempt:', logError);
+
+      // Check if order is completed
+      if (order.paymentStatus !== 'completed') {
+        console.log('Order not completed:', order.paymentStatus);
+        // Log failed access attempt
+        try {
+          await AccessLog.create({
+            orderId: order._id, // Use the actual order ID
+            productId: null,
+            accessToken,
+            ipAddress,
+            userAgent,
+            accessGranted: false,
+            failureReason: 'Order not completed',
+            expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+          });
+        } catch (logError) {
+          console.error('Failed to log access attempt:', logError);
+        }
+
+        return res.status(400).json({
+          success: false,
+          error: 'Order not completed'
+        });
+      }
+
+      // Verify access token
+      if (!order.accessToken || order.accessToken !== accessToken) {
+        console.log('Invalid access token. Expected:', order.accessToken, 'Provided:', accessToken);
+        // Log failed access attempt
+        try {
+          await AccessLog.create({
+            orderId: order._id, // Use the actual order ID
+            productId: null,
+            accessToken,
+            ipAddress,
+            userAgent,
+            accessGranted: false,
+            failureReason: 'Invalid Access Token',
+            expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+          });
+        } catch (logError) {
+          console.error('Failed to log access attempt:', logError);
+        }
+
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid Access Token'
+        });
+      }
+
+      // Get the first product (for now, handle single product orders)
+      const firstItem = order.items[0];
+      console.log('First item:', firstItem);
+      const product = await Product.findById(firstItem.product);
+      console.log('Product found:', product);
+      
+      if (!product) {
+        console.log('Product not found:', firstItem.product);
+        // Log failed access attempt
+        try {
+          await AccessLog.create({
+            orderId: order._id, // Use the actual order ID
+            productId: firstItem.product,
+            accessToken,
+            ipAddress,
+            userAgent,
+            accessGranted: false,
+            failureReason: 'Product not found',
+            expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+          });
+        } catch (logError) {
+          console.error('Failed to log access attempt:', logError);
+        }
+
+        return res.status(404).json({
+          success: false,
+          error: 'Product not found'
+        });
+      }
+
+      // Generate signed URL for PDF (30 minutes expiry)
+      console.log('Generating signed URL for PDF:', product.pdfUrl);
+      const pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
+      console.log('Generated PDF URL:', pdfUrl ? 'URL generated' : 'URL generation failed');
+      const expiryTime = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes from now
+
+      // Log successful access attempt
+      try {
+        await AccessLog.create({
+          orderId: order._id, // Use the actual order ID
+          productId: product._id,
+          userId: order.user,
+          guestEmail: order.guestEmail,
+          accessToken,
+          ipAddress,
+          userAgent,
+          accessGranted: true,
+          pdfUrl,
+          expiryTime
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
+
+      // Log access
+      console.log('PDF access granted for:', {
+        orderId: order._id,
+        purchaseId: order.purchaseId,
+        productId: product._id,
+        productName: product.name
+      });
+
+      console.log('=== PDF ACCESS VERIFICATION SUCCESS ===');
+      return res.json({
+        success: true,
+        pdfUrl,
+        pdfPassword: product.pdfPassword,
+        message: 'Access granted'
+      });
+    } catch (error) {
+      console.error('=== PDF ACCESS VERIFICATION ERROR ===');
+      console.error('PDF Access Verification Error:', error);
+      
+      // Ensure we always return JSON even in error cases
+      res.setHeader('Content-Type', 'application/json');
+      
+      // Log failed access attempt due to system error
+      try {
+        const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+        const userAgent = req.get('User-Agent') || 'unknown';
+        
+        await AccessLog.create({
+          orderId: req.body?.orderId,
+          productId: null,
+          accessToken: req.body?.accessToken,
+          ipAddress,
+          userAgent,
+          accessGranted: false,
+          failureReason: 'System error: ' + (error instanceof Error ? error.message : 'Unknown error'),
+          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
+      
+      // Ensure we always return a valid JSON response
+      console.log('=== PDF ACCESS VERIFICATION ERROR RESPONSE ===');
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to verify access',
+        message: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined
+      });
     }
-    
-    // Ensure we always return a valid JSON response
+  })().catch((error) => {
+    // This is a last resort catch to ensure we always return JSON
+    console.error('Unhandled error in PDF access verification:', error);
+    res.setHeader('Content-Type', 'application/json');
     return res.status(500).json({
       success: false,
-      error: 'Failed to verify access',
-      message: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined
+      error: 'Unhandled server error',
+      message: 'Please try again later'
     });
-  }
-}));
+  });
+});
 
 // PDF Viewer Route - Secure PDF access with purchase verification
 router.get('/view-pdf/:purchaseId', asyncHandler(async (req: Request, res: Response) => {
