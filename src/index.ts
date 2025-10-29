@@ -42,12 +42,12 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com"],
+      defaultSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://checkout.razorpay.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://checkout.razorpay.com", "https://lumberjack.razorpay.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https://desiprompts.in", "https://*.s3.*.amazonaws.com", "https://desi-prompts-backend2-3.onrender.com", "*"],
-      connectSrc: ["'self'", "https://lumberjack.razorpay.com", "https://desi-prompts-backend2-3.onrender.com"],
+      imgSrc: ["'self'", "data:", "https://desiprompts.in", "https://*.s3.*.amazonaws.com", "https://desi-prompts-backend2-3.onrender.com", "https://api.razorpay.com", "*"],
+      connectSrc: ["'self'", "https://lumberjack.razorpay.com", "https://desi-prompts-backend2-3.onrender.com", "https://api.razorpay.com"],
       frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com"],
       objectSrc: ["'none'"],
       upgradeInsecureRequests: [],
@@ -88,6 +88,8 @@ const corsOptions = {
     'https://desiprompts.in/admin', // Production admin frontend
     'https://www.desiprompts.in', // WWW version
     'https://desi-prompts-backend2-3.onrender.com', // Render backend
+    'https://api.razorpay.com', // Razorpay API
+    'https://checkout.razorpay.com', // Razorpay checkout
     ...(process.env.CORS_ORIGINS || '').split(',').filter(Boolean)
   ],
   credentials: true,

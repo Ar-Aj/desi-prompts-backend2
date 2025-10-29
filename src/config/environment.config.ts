@@ -89,6 +89,8 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
       keySecret: process.env.RAZORPAY_KEY_SECRET,
       webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
     };
+  } else {
+    console.warn('⚠️  Razorpay credentials not configured. Payment processing will be disabled.');
   }
 
   // Validate required configurations

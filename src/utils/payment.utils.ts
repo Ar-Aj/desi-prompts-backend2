@@ -45,9 +45,15 @@ export const verifyRazorpaySignature = (
   signature: string
 ): boolean => {
   try {
+    // Check if required environment variables are present
+    if (!env.razorpay?.keySecret) {
+      console.error('Razorpay key secret not configured');
+      return false;
+    }
+    
     const body = orderId + '|' + paymentId;
     const expectedSignature = crypto
-      .createHmac('sha256', env.razorpay?.keySecret!)
+      .createHmac('sha256', env.razorpay.keySecret)
       .update(body.toString())
       .digest('hex');
 
@@ -63,8 +69,14 @@ export const verifyWebhookSignature = (
   signature: string
 ): boolean => {
   try {
+    // Check if required environment variables are present
+    if (!env.razorpay?.webhookSecret) {
+      console.error('Razorpay webhook secret not configured');
+      return false;
+    }
+    
     const expectedSignature = crypto
-      .createHmac('sha256', env.razorpay?.webhookSecret!)
+      .createHmac('sha256', env.razorpay.webhookSecret)
       .update(body)
       .digest('hex');
 
