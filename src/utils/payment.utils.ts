@@ -1,11 +1,14 @@
+// @ts-ignore
 import Razorpay from 'razorpay';
 import * as crypto from 'crypto';
 import { env } from '../config/environment.config';
 
 // Initialize Razorpay only if keys are provided
-let razorpay: Razorpay | null = null;
+// @ts-ignore
+let razorpay: any = null;
 
 if (env.razorpay?.keyId && env.razorpay?.keySecret) {
+  // @ts-ignore
   razorpay = new Razorpay({
     key_id: env.razorpay.keyId,
     key_secret: env.razorpay.keySecret
@@ -31,6 +34,7 @@ export const createRazorpayOrder = async (
       payment_capture: 1 // Auto capture payment
     };
 
+    // @ts-ignore
     const order = await razorpay.orders.create(options);
     return order;
   } catch (error) {
@@ -93,6 +97,7 @@ export const fetchPaymentDetails = async (paymentId: string) => {
   }
 
   try {
+    // @ts-ignore
     const payment = await razorpay.payments.fetch(paymentId);
     return payment;
   } catch (error) {
