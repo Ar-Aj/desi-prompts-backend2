@@ -100,8 +100,16 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       });
     }
 
-    // Find order by ID
-    const order = await Order.findById(orderId);
+    // Find order by ID or purchaseId
+    // The frontend might be sending purchaseId instead of the database _id
+    let order = await Order.findById(orderId);
+    
+    // If not found by _id, try to find by purchaseId
+    if (!order) {
+      console.log('Order not found by _id, trying purchaseId:', orderId);
+      order = await Order.findOne({ purchaseId: orderId });
+    }
+    
     if (!order) {
       // Log failed access attempt
       try {
@@ -130,7 +138,7 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       // Log failed access attempt
       try {
         await AccessLog.create({
-          orderId,
+          orderId: order._id, // Use the actual order ID
           productId: null,
           accessToken,
           ipAddress,
@@ -154,7 +162,7 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       // Log failed access attempt
       try {
         await AccessLog.create({
-          orderId,
+          orderId: order._id, // Use the actual order ID
           productId: null,
           accessToken,
           ipAddress,
@@ -181,7 +189,7 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       // Log failed access attempt
       try {
         await AccessLog.create({
-          orderId,
+          orderId: order._id, // Use the actual order ID
           productId: firstItem.product,
           accessToken,
           ipAddress,
@@ -207,7 +215,7 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     // Log successful access attempt
     try {
       await AccessLog.create({
-        orderId,
+        orderId: order._id, // Use the actual order ID
         productId: product._id,
         userId: order.user,
         guestEmail: order.guestEmail,
@@ -224,7 +232,8 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
 
     // Log access
     console.log('PDF access granted for:', {
-      orderId,
+      orderId: order._id,
+      purchaseId: order.purchaseId,
       productId: product._id,
       productName: product.name
     });
@@ -257,9 +266,11 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
       console.error('Failed to log access attempt:', logError);
     }
     
+    // Ensure we always return a valid JSON response
     return res.status(500).json({
       success: false,
-      error: 'Failed to verify access'
+      error: 'Failed to verify access',
+      message: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined
     });
   }
 }));
@@ -344,119 +355,127 @@ router.get('/view-pdf/:purchaseId', asyncHandler(async (req: Request, res: Respo
 
 // Proxy endpoint to serve S3 files directly (to avoid CORS issues)
 router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) => {
-  const fullKey = req.params.key + (req.params[0] || '');
-  
-  console.log('S3 Proxy Request:', { fullKey, params: req.params, url: req.url });
-  
-  if (!fullKey) {
-    console.log('Missing key parameter');
-    res.status(400).json({
-      success: false,
-      error: 'Missing key parameter'
-    });
-    return;
-  }
-
-  // Handle files without folder prefixes by adding a default folder
-  let processedKey = fullKey;
-  if (!fullKey.includes('/') || fullKey.startsWith('/')) {
-    // If the key doesn't have a folder prefix, add 'images/' prefix
-    processedKey = fullKey.startsWith('/') ? `images${fullKey}` : `images/${fullKey}`;
-    console.log('Processed key for file without folder prefix:', { original: fullKey, processed: processedKey });
-  }
-  
   try {
-    // Get the object from S3
-    const command = new GetObjectCommand({
-      Bucket: env.s3.bucketName!,
-      Key: processedKey
+    const fullKey = req.params.key + (req.params[0] || '');
+    
+    console.log('S3 Proxy Request:', { fullKey, params: req.params, url: req.url });
+    
+    if (!fullKey) {
+      console.log('Missing key parameter');
+      return res.status(400).json({
+        success: false,
+        error: 'Missing key parameter'
+      });
+    }
+
+    // Handle files without folder prefixes by adding a default folder
+    let processedKey = fullKey;
+    if (!fullKey.includes('/') || fullKey.startsWith('/')) {
+      // If the key doesn't have a folder prefix, add 'images/' prefix
+      processedKey = fullKey.startsWith('/') ? `images${fullKey}` : `images/${fullKey}`;
+      console.log('Processed key for file without folder prefix:', { original: fullKey, processed: processedKey });
+    }
+    
+    try {
+      // Get the object from S3
+      const command = new GetObjectCommand({
+        Bucket: env.s3.bucketName!,
+        Key: processedKey
+      });
+      
+      console.log('S3 GetObjectCommand:', { 
+        bucket: env.s3.bucketName, 
+        key: processedKey 
+      });
+      
+      const s3Response = await s3Client.send(command);
+      console.log('S3 Response received:', { 
+        contentType: s3Response.ContentType,
+        contentLength: s3Response.ContentLength,
+        statusCode: s3Response.$metadata?.httpStatusCode
+      });
+      
+      // Check if the file actually exists and has content
+      if (!s3Response.Body || s3Response.ContentLength === 0) {
+        console.log('S3 file not found or empty:', processedKey);
+        return res.status(404).json({
+          success: false,
+          error: 'File not found or is empty',
+          key: processedKey
+        });
+      }
+      
+      // Set the appropriate headers
+      if (s3Response.ContentType) {
+        res.set('Content-Type', s3Response.ContentType);
+      }
+      if (s3Response.ContentLength) {
+        res.set('Content-Length', s3Response.ContentLength.toString());
+      }
+      if (s3Response.CacheControl) {
+        res.set('Cache-Control', s3Response.CacheControl);
+      }
+      if (s3Response.ETag) {
+        res.set('ETag', s3Response.ETag);
+      }
+      
+      // Handle the response body properly
+      if (s3Response.Body) {
+        // @ts-ignore - Handle S3 stream response
+        s3Response.Body.pipe(res);
+      } else {
+        console.log('S3 file not found:', processedKey);
+        return res.status(404).json({
+          success: false,
+          error: 'File not found',
+          key: processedKey
+        });
+      }
+    } catch (error: any) {
+      console.error('Error proxying S3 file:', error);
+      // Handle specific S3 errors
+      if (error.name === 'NoSuchKey') {
+        return res.status(404).json({
+          success: false,
+          error: 'File not found in S3 bucket',
+          details: error.message,
+          key: processedKey,
+          bucket: env.s3.bucketName
+        });
+      } else if (error.name === 'Forbidden') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied to S3 file - check bucket permissions',
+          details: error.message,
+          key: processedKey,
+          bucket: env.s3.bucketName
+        });
+      } else if (error.name === 'NoSuchBucket') {
+        return res.status(404).json({
+          success: false,
+          error: 'S3 bucket not found - check bucket name and region',
+          details: error.message,
+          bucket: env.s3.bucketName,
+          region: env.s3.region
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to proxy S3 file - internal server error',
+          details: error.message,
+          key: processedKey,
+          bucket: env.s3.bucketName
+        });
+      }
+    }
+  } catch (error) {
+    console.error('S3 Proxy Error:', error);
+    // Ensure we always return a valid JSON response for the proxy endpoint as well
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to proxy S3 file',
+      message: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined
     });
-    
-    console.log('S3 GetObjectCommand:', { 
-      bucket: env.s3.bucketName, 
-      key: processedKey 
-    });
-    
-    const s3Response = await s3Client.send(command);
-    console.log('S3 Response received:', { 
-      contentType: s3Response.ContentType,
-      contentLength: s3Response.ContentLength,
-      statusCode: s3Response.$metadata?.httpStatusCode
-    });
-    
-    // Check if the file actually exists and has content
-    if (!s3Response.Body || s3Response.ContentLength === 0) {
-      console.log('S3 file not found or empty:', processedKey);
-      res.status(404).json({
-        success: false,
-        error: 'File not found or is empty',
-        key: processedKey
-      });
-      return;
-    }
-    
-    // Set the appropriate headers
-    if (s3Response.ContentType) {
-      res.set('Content-Type', s3Response.ContentType);
-    }
-    if (s3Response.ContentLength) {
-      res.set('Content-Length', s3Response.ContentLength.toString());
-    }
-    if (s3Response.CacheControl) {
-      res.set('Cache-Control', s3Response.CacheControl);
-    }
-    if (s3Response.ETag) {
-      res.set('ETag', s3Response.ETag);
-    }
-    
-    // Handle the response body properly
-    if (s3Response.Body) {
-      // @ts-ignore - Handle S3 stream response
-      s3Response.Body.pipe(res);
-    } else {
-      console.log('S3 file not found:', processedKey);
-      res.status(404).json({
-        success: false,
-        error: 'File not found',
-        key: processedKey
-      });
-    }
-  } catch (error: any) {
-    console.error('Error proxying S3 file:', error);
-    // Handle specific S3 errors
-    if (error.name === 'NoSuchKey') {
-      res.status(404).json({
-        success: false,
-        error: 'File not found in S3 bucket',
-        details: error.message,
-        key: processedKey,
-        bucket: env.s3.bucketName
-      });
-    } else if (error.name === 'Forbidden') {
-      res.status(403).json({
-        success: false,
-        error: 'Access denied to S3 file - check bucket permissions',
-        details: error.message,
-        key: processedKey,
-        bucket: env.s3.bucketName
-      });
-    } else if (error.name === 'NoSuchBucket') {
-      res.status(404).json({
-        success: false,
-        error: 'S3 bucket not found - check bucket name and region',
-        details: error.message,
-        bucket: env.s3.bucketName,
-        region: env.s3.region
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        error: 'Failed to proxy S3 file - internal server error',
-        details: error.message,
-        key: processedKey,
-        bucket: env.s3.bucketName
-      });
-    }
   }
 }));
 
