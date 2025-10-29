@@ -25,6 +25,7 @@
     "nodemailer": "^6.9.16",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "razorpay": "^2.9.5",
     "resend": "^4.1.1",
     "sharp": "^0.33.5",
     "zod": "^3.24.1"
@@ -40,6 +41,7 @@
     "@types/nodemailer": "^6.4.17",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.16",
+    "@types/razorpay": "^2.0.0",
     "@types/supertest": "^6.0.2",
     "jest": "^29.7.0",
     "nodemon": "^3.1.9",

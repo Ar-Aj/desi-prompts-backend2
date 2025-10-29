@@ -423,6 +423,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       if (s3Response.Body) {
         // @ts-ignore - Handle S3 stream response
         s3Response.Body.pipe(res);
+        return; // Return early since we're streaming the response
       } else {
         console.log('S3 file not found:', processedKey);
         return res.status(404).json({

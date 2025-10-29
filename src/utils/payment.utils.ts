@@ -1,4 +1,4 @@
-import Razorpay = require('razorpay');
+import Razorpay from 'razorpay';
 import * as crypto from 'crypto';
 import { env } from '../config/environment.config';
 
