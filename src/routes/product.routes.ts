@@ -6,7 +6,6 @@ import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../utils/storage.utils';
-import { getSignedDownloadUrl } from '../utils/storage.utils';
 import { env } from '../config/environment.config';
 
 const router: Router = Router();
@@ -44,7 +43,7 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 }));
 
 // Test endpoint - ALWAYS returns JSON
-router.get('/test-json', (req: Request, res: Response) => {
+router.get('/test-json', (_req: Request, res: Response) => {
   console.log('Test endpoint called');
   res.setHeader('Content-Type', 'application/json');
   return res.json({
@@ -55,7 +54,7 @@ router.get('/test-json', (req: Request, res: Response) => {
 });
 
 // ULTRA-SIMPLE PDF ACCESS - ABSOLUTELY NO DEPENDENCIES
-router.post('/verify-access', (req: Request, res: Response) => {
+router.post('/verify-access', (_req: Request, res: Response) => {
   console.log('=== ULTRA-SIMPLE PDF ACCESS ENDPOINT HIT ===');
   console.log('Request received at:', new Date().toISOString());
   
