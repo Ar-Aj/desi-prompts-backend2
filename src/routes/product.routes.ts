@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { Product } from '../models/Product.model';
 import { Order } from '../models/Order.model';
 import { Demo } from '../models/Demo.model';
-import { AccessLog } from '../models/AccessManager.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
