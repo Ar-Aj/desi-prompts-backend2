@@ -47,6 +47,9 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
 // Verify PDF access endpoint
 router.post('/verify-access', asyncHandler(async (req: Request, res: Response) => {
   try {
+    // Ensure we always return JSON
+    res.setHeader('Content-Type', 'application/json');
+    
     const { orderId, accessToken } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
     const userAgent = req.get('User-Agent') || 'unknown';
@@ -246,6 +249,9 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     });
   } catch (error) {
     console.error('PDF Access Verification Error:', error);
+    
+    // Ensure we always return JSON even in error cases
+    res.setHeader('Content-Type', 'application/json');
     
     // Log failed access attempt due to system error
     try {
