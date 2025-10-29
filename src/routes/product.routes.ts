@@ -56,16 +56,20 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     // Validate parameters
     if (!orderId) {
       // Log failed access attempt
-      await AccessLog.create({
-        orderId: null,
-        productId: null,
-        accessToken: accessToken || 'none',
-        ipAddress,
-        userAgent,
-        accessGranted: false,
-        failureReason: 'Order ID is required',
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-      });
+      try {
+        await AccessLog.create({
+          orderId: null,
+          productId: null,
+          accessToken: accessToken || 'none',
+          ipAddress,
+          userAgent,
+          accessGranted: false,
+          failureReason: 'Order ID is required',
+          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
 
       return res.status(400).json({
         success: false,
@@ -75,16 +79,20 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
 
     if (!accessToken) {
       // Log failed access attempt
-      await AccessLog.create({
-        orderId,
-        productId: null,
-        accessToken: 'none',
-        ipAddress,
-        userAgent,
-        accessGranted: false,
-        failureReason: 'Access Token is required',
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-      });
+      try {
+        await AccessLog.create({
+          orderId,
+          productId: null,
+          accessToken: 'none',
+          ipAddress,
+          userAgent,
+          accessGranted: false,
+          failureReason: 'Access Token is required',
+          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
 
       return res.status(400).json({
         success: false,
@@ -96,16 +104,20 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     const order = await Order.findById(orderId);
     if (!order) {
       // Log failed access attempt
-      await AccessLog.create({
-        orderId,
-        productId: null,
-        accessToken,
-        ipAddress,
-        userAgent,
-        accessGranted: false,
-        failureReason: 'Order not found',
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-      });
+      try {
+        await AccessLog.create({
+          orderId,
+          productId: null,
+          accessToken,
+          ipAddress,
+          userAgent,
+          accessGranted: false,
+          failureReason: 'Order not found',
+          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
 
       return res.status(404).json({
         success: false,
@@ -116,16 +128,20 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     // Check if order is completed
     if (order.paymentStatus !== 'completed') {
       // Log failed access attempt
-      await AccessLog.create({
-        orderId,
-        productId: null,
-        accessToken,
-        ipAddress,
-        userAgent,
-        accessGranted: false,
-        failureReason: 'Order not completed',
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-      });
+      try {
+        await AccessLog.create({
+          orderId,
+          productId: null,
+          accessToken,
+          ipAddress,
+          userAgent,
+          accessGranted: false,
+          failureReason: 'Order not completed',
+          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
 
       return res.status(400).json({
         success: false,
@@ -136,16 +152,20 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     // Verify access token
     if (!order.accessToken || order.accessToken !== accessToken) {
       // Log failed access attempt
-      await AccessLog.create({
-        orderId,
-        productId: null,
-        accessToken,
-        ipAddress,
-        userAgent,
-        accessGranted: false,
-        failureReason: 'Invalid Access Token',
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-      });
+      try {
+        await AccessLog.create({
+          orderId,
+          productId: null,
+          accessToken,
+          ipAddress,
+          userAgent,
+          accessGranted: false,
+          failureReason: 'Invalid Access Token',
+          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
 
       return res.status(401).json({
         success: false,
@@ -159,16 +179,20 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     
     if (!product) {
       // Log failed access attempt
-      await AccessLog.create({
-        orderId,
-        productId: firstItem.product,
-        accessToken,
-        ipAddress,
-        userAgent,
-        accessGranted: false,
-        failureReason: 'Product not found',
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
-      });
+      try {
+        await AccessLog.create({
+          orderId,
+          productId: firstItem.product,
+          accessToken,
+          ipAddress,
+          userAgent,
+          accessGranted: false,
+          failureReason: 'Product not found',
+          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes from now
+        });
+      } catch (logError) {
+        console.error('Failed to log access attempt:', logError);
+      }
 
       return res.status(404).json({
         success: false,
@@ -181,18 +205,22 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     const expiryTime = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes from now
 
     // Log successful access attempt
-    await AccessLog.create({
-      orderId,
-      productId: product._id,
-      userId: order.user,
-      guestEmail: order.guestEmail,
-      accessToken,
-      ipAddress,
-      userAgent,
-      accessGranted: true,
-      pdfUrl,
-      expiryTime
-    });
+    try {
+      await AccessLog.create({
+        orderId,
+        productId: product._id,
+        userId: order.user,
+        guestEmail: order.guestEmail,
+        accessToken,
+        ipAddress,
+        userAgent,
+        accessGranted: true,
+        pdfUrl,
+        expiryTime
+      });
+    } catch (logError) {
+      console.error('Failed to log access attempt:', logError);
+    }
 
     // Log access
     console.log('PDF access granted for:', {
