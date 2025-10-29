@@ -99,6 +99,13 @@ app.use(cors(corsOptions));
 
 // No rate limiting - for better user experience and workflow
 
+// Add a test route BEFORE all other middleware
+app.get('/test-super-simple', (req, res) => {
+  console.log('Super simple test endpoint hit');
+  res.setHeader('Content-Type', 'application/json');
+  res.send(JSON.stringify({ success: true, message: 'Super simple test' }));
+});
+
 // Webhook routes (before body parser for raw body)
 app.use('/api/webhooks', webhookRoutes);
 
