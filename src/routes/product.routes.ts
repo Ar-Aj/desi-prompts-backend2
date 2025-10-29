@@ -54,13 +54,18 @@ router.get('/test-json', (_req: Request, res: Response) => {
 });
 
 // ULTRA-SIMPLE PDF ACCESS - ABSOLUTELY NO DEPENDENCIES
-router.post('/verify-access', (_req: Request, res: Response) => {
+router.post('/verify-access', (req: Request, res: Response) => {
   console.log('=== ULTRA-SIMPLE PDF ACCESS ENDPOINT HIT ===');
   console.log('Request received at:', new Date().toISOString());
+  console.log('Request method:', req.method);
+  console.log('Request URL:', req.url);
+  console.log('Request headers:', req.headers);
+  console.log('Request body:', req.body);
   
-  // Set headers FIRST and IMMEDIATELY
+  // Set headers FIRST and IMMEDIATELY to prevent HTML responses
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   
   // Send the simplest possible JSON response
   const response = {

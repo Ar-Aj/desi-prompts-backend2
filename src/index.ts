@@ -100,6 +100,19 @@ app.use(cors(corsOptions));
 // No rate limiting - for better user experience and workflow
 
 // Add a test route BEFORE all other middleware
+app.post('/test-pdf-endpoint', (_req, res) => {
+  console.log('Super simple PDF test endpoint hit');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.status(200).json({ 
+    success: true, 
+    message: 'Super simple PDF test',
+    pdfUrl: 'https://example.com/test.pdf',
+    pdfPassword: 'TEST1234'
+  });
+});
+
 app.get('/test-super-simple', (_req, res) => {
   console.log('Super simple test endpoint hit');
   res.setHeader('Content-Type', 'application/json');
