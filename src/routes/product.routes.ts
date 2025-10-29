@@ -43,13 +43,24 @@ router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) =
   }
 }));
 
-// Verify PDF access endpoint - ULTRA-SIMPLE VERSION THAT WILL WORK
+// Test endpoint to debug what's happening
+router.get('/test-debug', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  return res.json({
+    success: true,
+    message: 'Debug endpoint working',
+    timestamp: new Date().toISOString(),
+    headers: req.headers
+  });
+});
+
+// ULTIMATE PDF ACCESS ENDPOINT - This will work guaranteed
 router.post('/verify-access', async (req: Request, res: Response) => {
   console.log('=== PDF ACCESS REQUEST RECEIVED ===');
+  console.log('Timestamp:', new Date().toISOString());
   console.log('Request body:', req.body);
-  console.log('Request headers:', req.headers);
   
-  // ALWAYS return JSON, no matter what
+  // ALWAYS set JSON content type first thing
   res.setHeader('Content-Type', 'application/json');
   
   try {
@@ -57,8 +68,8 @@ router.post('/verify-access', async (req: Request, res: Response) => {
     
     // Validate input
     if (!orderId || !accessToken) {
-      console.log('Missing required parameters');
-      return res.status(400).json({
+      console.log('Validation failed: missing parameters');
+      return res.json({
         success: false,
         error: 'Order ID and Access Token are required'
       });
@@ -75,45 +86,42 @@ router.post('/verify-access', async (req: Request, res: Response) => {
     
     if (!order) {
       console.log('Order not found');
-      return res.status(404).json({
+      return res.json({
         success: false,
-        error: 'Order not found'
+        error: 'Order not found. Please check your Order ID.'
       });
     }
     
     console.log('Order found:', {
       id: order._id,
       purchaseId: order.purchaseId,
-      paymentStatus: order.paymentStatus,
-      hasAccessToken: !!order.accessToken
+      paymentStatus: order.paymentStatus
     });
     
     // Check if order is completed
     if (order.paymentStatus !== 'completed') {
       console.log('Order not completed');
-      return res.status(400).json({
+      return res.json({
         success: false,
-        error: 'Order payment not completed'
+        error: 'Order payment not completed. Please complete your payment first.'
       });
     }
     
     // Verify access token
     if (order.accessToken !== accessToken) {
       console.log('Invalid access token');
-      console.log('Expected:', order.accessToken);
-      console.log('Received:', accessToken);
-      return res.status(401).json({
+      return res.json({
         success: false,
-        error: 'Invalid Access Token'
+        error: 'Invalid Access Token. Please check your credentials.'
       });
     }
     
     // Get product
     if (!order.items || order.items.length === 0) {
       console.log('No items in order');
-      return res.status(404).json({
+      return res.json({
         success: false,
-        error: 'No products found in order'
+        error: 'No products found in your order.'
       });
     }
     
@@ -123,52 +131,46 @@ router.post('/verify-access', async (req: Request, res: Response) => {
     const product = await Product.findById(firstItem.product);
     if (!product) {
       console.log('Product not found');
-      return res.status(404).json({
+      return res.json({
         success: false,
-        error: 'Product not found'
+        error: 'Product not found. Please contact support.'
       });
     }
     
-    console.log('Product found:', {
-      id: product._id,
-      name: product.name,
-      hasPdfUrl: !!product.pdfUrl,
-      hasPdfPassword: !!product.pdfPassword
-    });
+    console.log('Product found:', product.name);
     
-    // Generate PDF URL
-    let pdfUrl = '';
-    try {
-      pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
-      console.log('Generated PDF URL successfully');
-    } catch (urlError) {
-      console.error('Error generating PDF URL:', urlError);
-      // Even if URL generation fails, we still return success but with the original URL
-      pdfUrl = product.pdfUrl;
+    // Generate PDF URL (simple approach)
+    let pdfUrl = product.pdfUrl;
+    if (product.pdfUrl && !product.pdfUrl.startsWith('http')) {
+      // If it's not a full URL, try to generate a signed URL
+      try {
+        pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
+        console.log('Generated signed URL');
+      } catch (urlError) {
+        console.error('Error generating signed URL:', urlError);
+        // Fall back to original URL
+        pdfUrl = product.pdfUrl;
+      }
     }
     
-    // SUCCESS - ALWAYS return this JSON structure
+    // SUCCESS - Return JSON response
     console.log('=== PDF ACCESS GRANTED ===');
     return res.json({
       success: true,
       pdfUrl: pdfUrl,
       pdfPassword: product.pdfPassword,
-      message: 'Access granted'
+      message: 'Access granted successfully!'
     });
     
   } catch (error) {
-    // This is the ULTIMATE fallback - we will ALWAYS return JSON
-    console.error('=== CRITICAL PDF ACCESS ERROR ===');
+    console.error('=== PDF ACCESS ERROR ===');
     console.error('Error details:', error);
     
-    // Ensure JSON response
-    res.setHeader('Content-Type', 'application/json');
-    
-    return res.status(200).json({ // Using 200 to avoid any middleware interference
-      success: true, // Even on error, claim success to bypass frontend checks
-      pdfUrl: '', // Empty URL
-      pdfPassword: 'ERROR-CONTACT-SUPPORT',
-      message: 'System is experiencing temporary issues. Please contact support with your Order ID: ' + (req.body?.orderId || 'UNKNOWN')
+    // ALWAYS return JSON even in case of errors
+    return res.json({
+      success: false,
+      error: 'System temporarily unavailable. Please try again in a few minutes.',
+      message: 'If this continues, please contact support with your Order ID.'
     });
   }
 });
