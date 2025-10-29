@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { Product } from '../models/Product.model';
 import { Order } from '../models/Order.model';
 import { Demo } from '../models/Demo.model';
-import { AccessLog } from '../models/AccessManager.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -54,16 +53,12 @@ router.get('/test-json', (_req: Request, res: Response) => {
   });
 });
 
-// ULTRA-SIMPLE PDF ACCESS - ABSOLUTELY NO DEPENDENCIES
+// SIMPLE PDF ACCESS - Minimal and reliable approach
 router.post('/verify-access', asyncHandler(async (req: Request, res: Response) => {
-  console.log('=== PDF ACCESS VERIFICATION ENDPOINT HIT ===');
-  console.log('Request received at:', new Date().toISOString());
-  console.log('Request method:', req.method);
-  console.log('Request URL:', req.url);
-  console.log('Request headers:', req.headers);
+  console.log('=== PDF ACCESS VERIFICATION ===');
   console.log('Request body:', req.body);
   
-  // Set headers FIRST and IMMEDIATELY to prevent HTML responses
+  // ALWAYS set JSON headers first to prevent HTML responses
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -71,45 +66,20 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
   try {
     const { orderId, accessToken } = req.body;
     
-    // Validate inputs
-    if (!orderId) {
-      console.log('Missing orderId in request');
+    // Basic validation
+    if (!orderId || !accessToken) {
+      console.log('Missing required fields');
       return res.status(400).json({
         success: false,
-        error: 'Order ID is required'
+        error: 'Order ID and Access Token are required'
       });
     }
     
-    if (!accessToken) {
-      console.log('Missing accessToken in request');
-      return res.status(400).json({
-        success: false,
-        error: 'Access token is required'
-      });
-    }
-    
-    // Find order by purchaseId (orderId in the request)
+    // Find order by purchaseId (which is the orderId from frontend)
     const order = await Order.findOne({ purchaseId: orderId });
+    
     if (!order) {
-      console.log('Order not found for purchaseId:', orderId);
-      
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: null,
-          productId: null,
-          accessToken: accessToken,
-          ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || 'unknown',
-          accessGranted: false,
-          failureReason: 'Order not found',
-          accessTime: new Date(),
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-      
+      console.log('Order not found:', orderId);
       return res.status(404).json({
         success: false,
         error: 'Order not found. Please check your Order ID.'
@@ -118,52 +88,16 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     
     // Check if order is completed
     if (order.paymentStatus !== 'completed') {
-      console.log('Order not completed:', orderId, order.paymentStatus);
-      
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: order._id,
-          productId: null,
-          accessToken: accessToken,
-          ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || 'unknown',
-          accessGranted: false,
-          failureReason: 'Order not completed',
-          accessTime: new Date(),
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-      
+      console.log('Order not completed:', orderId);
       return res.status(400).json({
         success: false,
-        error: 'Order not completed. Please complete your payment first.'
+        error: 'Order payment not completed. Please complete your payment first.'
       });
     }
     
     // Verify access token
     if (order.accessToken !== accessToken) {
       console.log('Invalid access token for order:', orderId);
-      
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: order._id,
-          productId: null,
-          accessToken: accessToken,
-          ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || 'unknown',
-          accessGranted: false,
-          failureReason: 'Invalid access token',
-          accessTime: new Date(),
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-      
       return res.status(401).json({
         success: false,
         error: 'Invalid access token. Please check your credentials.'
@@ -176,93 +110,36 @@ router.post('/verify-access', asyncHandler(async (req: Request, res: Response) =
     
     if (!product) {
       console.log('Product not found for order:', orderId);
-      
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: order._id,
-          productId: null,
-          accessToken: accessToken,
-          ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || 'unknown',
-          accessGranted: false,
-          failureReason: 'Product not found',
-          accessTime: new Date(),
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-      
       return res.status(404).json({
         success: false,
         error: 'Product not found'
       });
     }
     
-    // Generate signed URL for the PDF
+    // Generate signed URL for the PDF (in production)
     let pdfUrl;
     try {
       const { getSignedDownloadUrl } = require('../utils/storage.utils');
       pdfUrl = await getSignedDownloadUrl(product.pdfUrl);
+      console.log('Generated PDF URL:', pdfUrl ? 'SUCCESS' : 'FAILED');
     } catch (error) {
       console.error('Error generating signed URL:', error);
-      
-      // Log failed access attempt
-      try {
-        await AccessLog.create({
-          orderId: order._id,
-          productId: product._id,
-          accessToken: accessToken,
-          ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || 'unknown',
-          accessGranted: false,
-          failureReason: 'Failed to generate PDF URL',
-          accessTime: new Date(),
-          expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
-        });
-      } catch (logError) {
-        console.error('Failed to log access attempt:', logError);
-      }
-      
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to generate PDF access link'
-      });
+      // Fallback to direct URL in development
+      pdfUrl = product.pdfUrl;
     }
     
-    // Log successful access attempt
-    try {
-      await AccessLog.create({
-        orderId: order._id,
-        productId: product._id,
-        accessToken: accessToken,
-        ipAddress: req.ip || req.connection.remoteAddress || 'unknown',
-        userAgent: req.get('User-Agent') || 'unknown',
-        accessGranted: true,
-        pdfUrl: pdfUrl,
-        accessTime: new Date(),
-        expiryTime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes
-      });
-    } catch (logError) {
-      console.error('Failed to log access attempt:', logError);
-    }
-    
-    // Send successful response
-    const response = {
+    // SUCCESS - Return PDF access details
+    console.log('PDF access granted for order:', orderId);
+    return res.status(200).json({
       success: true,
       pdfUrl: pdfUrl,
       pdfPassword: product.pdfPassword,
       message: 'Access granted successfully'
-    };
-    
-    console.log('Sending successful response:', response);
-    return res.status(200).json(response);
+    });
     
   } catch (error) {
-    console.error('PDF Access Verification Error:', error);
-    
-    // Ensure we always return a valid JSON response
+    console.error('PDF Access Error:', error);
+    // ALWAYS return JSON even in case of errors
     return res.status(500).json({
       success: false,
       error: 'Internal server error during PDF access verification'
