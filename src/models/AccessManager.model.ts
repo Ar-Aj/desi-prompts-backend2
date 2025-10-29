@@ -20,16 +20,46 @@ const accessLogSchema = new Schema<IAccessLog>(
     orderId: {
       type: Schema.Types.ObjectId,
       ref: 'Order',
-      required: false
+      required: false,
+      set: (v: any) => {
+        // If v is a string that looks like an ObjectId, convert it
+        // Otherwise, if it's not a valid ObjectId, set to null
+        if (!v) return null;
+        if (v instanceof mongoose.Types.ObjectId) return v;
+        if (typeof v === 'string' && mongoose.Types.ObjectId.isValid(v)) {
+          return new mongoose.Types.ObjectId(v);
+        }
+        return null;
+      }
     },
     productId: {
       type: Schema.Types.ObjectId,
       ref: 'Product',
-      required: false
+      required: false,
+      set: (v: any) => {
+        // If v is a string that looks like an ObjectId, convert it
+        // Otherwise, if it's not a valid ObjectId, set to null
+        if (!v) return null;
+        if (v instanceof mongoose.Types.ObjectId) return v;
+        if (typeof v === 'string' && mongoose.Types.ObjectId.isValid(v)) {
+          return new mongoose.Types.ObjectId(v);
+        }
+        return null;
+      }
     },
     userId: {
       type: Schema.Types.ObjectId,
-      ref: 'User'
+      ref: 'User',
+      set: (v: any) => {
+        // If v is a string that looks like an ObjectId, convert it
+        // Otherwise, if it's not a valid ObjectId, set to null
+        if (!v) return null;
+        if (v instanceof mongoose.Types.ObjectId) return v;
+        if (typeof v === 'string' && mongoose.Types.ObjectId.isValid(v)) {
+          return new mongoose.Types.ObjectId(v);
+        }
+        return null;
+      }
     },
     guestEmail: {
       type: String,
