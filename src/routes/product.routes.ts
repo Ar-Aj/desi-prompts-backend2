@@ -357,7 +357,10 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
   try {
     const { url } = req.query;
     
+    console.log('PDF Proxy Endpoint Hit:', { url, headers: req.headers });
+    
     if (!url || typeof url !== 'string') {
+      console.log('Missing or invalid URL parameter');
       res.status(400).json({
         success: false,
         error: 'Missing or invalid URL parameter'
@@ -365,11 +368,28 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
       return;
     }
 
-    console.log('PDF Proxy Request for URL:', url);
+    // Validate that the URL is from our S3 bucket
+    if (!url.startsWith('https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/')) {
+      console.log('Invalid URL - not from our S3 bucket:', url);
+      res.status(400).json({
+        success: false,
+        error: 'Invalid URL - only S3 bucket URLs are allowed'
+      });
+      return;
+    }
+
+    console.log('Fetching PDF from S3:', url);
     
     try {
-      // Fetch the PDF from S3
-      const response = await fetch(url);
+      // Fetch the PDF from S3 with proper headers
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'DesiPrompts-PDF-Viewer/1.0'
+        }
+      });
+      
+      console.log('S3 Response Status:', response.status, response.statusText);
       
       if (!response.ok) {
         console.error('S3 Fetch Error:', response.status, response.statusText);
@@ -384,26 +404,39 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
       const contentType = response.headers.get('content-type') || 'application/pdf';
       const contentLength = response.headers.get('content-length');
       
-      // Set the appropriate headers
+      console.log('Setting response headers:', { contentType, contentLength });
+      
+      // Set the appropriate headers for the client
       res.set('Content-Type', contentType);
+      res.set('Access-Control-Allow-Origin', '*'); // Allow all origins for this proxy
+      res.set('X-Content-Type-Options', 'nosniff');
+      
       if (contentLength) {
         res.set('Content-Length', contentLength);
       }
       
       // Stream the response directly to the client
-      // @ts-ignore - Handle stream response
-      response.body.pipe(res);
+      if (response.body) {
+        // @ts-ignore - Handle stream response
+        response.body.pipe(res);
+      } else {
+        console.error('No response body from S3');
+        res.status(500).json({
+          success: false,
+          error: 'Empty response from S3'
+        });
+      }
       
     } catch (error: any) {
-      console.error('PDF Proxy Error:', error);
+      console.error('PDF Proxy Error (fetch):', error);
       res.status(500).json({
         success: false,
-        error: `Failed to proxy PDF: ${error.message || 'Unknown error'}`
+        error: `Failed to fetch PDF from S3: ${error.message || 'Unknown error'}`
       });
       return;
     }
   } catch (error) {
-    console.error('PDF Proxy Error:', error);
+    console.error('PDF Proxy Error (general):', error);
     res.status(500).json({
       success: false,
       error: 'Internal server error during PDF proxy'
