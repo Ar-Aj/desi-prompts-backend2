@@ -455,6 +455,53 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
   }
 }));
 
+// Test endpoint to check PDF content
+router.get('/test-pdf-content', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({
+        error: 'Missing or invalid URL parameter'
+      });
+      return;
+    }
+
+    console.log('Testing PDF content for URL:', url);
+    
+    // Fetch the PDF
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      res.status(response.status).json({
+        error: `Failed to fetch: ${response.status} ${response.statusText}`
+      });
+      return;
+    }
+    
+    const contentType = response.headers.get('content-type');
+    const contentLength = response.headers.get('content-length');
+    
+    // Get first 20 bytes to check header
+    const buffer = await response.clone().arrayBuffer();
+    const bytes = new Uint8Array(buffer, 0, Math.min(20, buffer.byteLength));
+    const header = String.fromCharCode(...bytes);
+    
+    res.json({
+      contentType,
+      contentLength,
+      header: header.substring(0, 20),
+      isPdf: header.startsWith('%PDF'),
+      byteLength: buffer.byteLength
+    });
+  } catch (error) {
+    console.error('Test error:', error);
+    res.status(500).json({
+      error: 'Test failed'
+    });
+  }
+}));
+
 // Get all products (public)
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const {
