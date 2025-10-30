@@ -414,6 +414,9 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
       res.set('Access-Control-Allow-Origin', '*'); // Allow all origins for this proxy
       res.set('X-Content-Type-Options', 'nosniff');
       
+      // Remove X-Frame-Options to allow embedding in iframes
+      res.set('X-Frame-Options', 'SAMEORIGIN');
+      
       if (contentLength) {
         res.set('Content-Length', contentLength);
       }
