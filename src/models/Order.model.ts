@@ -10,7 +10,6 @@ export interface IOrderItem {
 export interface IOrder extends Document {
   orderNumber: string;
   purchaseId: string; // Easy-to-remember ID for customer reference
-  accessToken?: string; // Unique access token for PDF access
   user?: mongoose.Types.ObjectId;
   guestEmail?: string;
   guestName?: string;
@@ -60,9 +59,6 @@ const orderSchema = new Schema<IOrder>(
       type: String
     },
     purchaseId: {
-      type: String
-    },
-    accessToken: {
       type: String
     },
     user: {

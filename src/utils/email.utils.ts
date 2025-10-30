@@ -81,10 +81,10 @@ export const getOrderConfirmationEmail = (
   customerName: string,
   orderNumber: string,
   purchaseId: string,
-  accessToken: string,
   products: Array<{ name: string; price: number }>,
   totalAmount: number,
-  pdfPassword: string
+  pdfPassword: string,
+  downloadLink: string
 ) => {
   const productsList = products
     .map(p => `<li>${p.name} - ₹${p.price.toLocaleString('en-IN')}</li>`)
@@ -129,18 +129,17 @@ export const getOrderConfirmationEmail = (
           </div>
           
           <div class="password-box">
-            <h3 style="color: #ffffff;">Secure Access Credentials</h3>
-            <p style="color: #cccccc;">Use these credentials to access your prompt pack:</p>
-            <p style="color: #cccccc; margin: 10px 0 5px 0;"><strong>Access Token:</strong></p>
-            <div class="access-token">${accessToken}</div>
+            <h3 style="color: #ffffff;">PDF Access Information</h3>
+            <p style="color: #cccccc;">Your prompt pack is ready for download:</p>
             <p style="color: #cccccc; margin: 15px 0 5px 0;"><strong>PDF Password:</strong></p>
             <div class="access-token">${pdfPassword}</div>
-            <p style="color: #cccccc; font-size: 12px; margin-top: 15px;">Save these credentials securely - you'll need them to access your download</p>
+            <p style="color: #cccccc; font-size: 12px; margin-top: 15px;">Use this password to open your downloaded PDF file</p>
           </div>
           
           <div style="text-align: center;">
-            <a href="${env.frontendUrl}/pdf-viewer?orderId=${purchaseId}" class="download-btn">Access Your Prompt Pack</a>
-            <p style="font-size: 12px; color: #888;">Secure access to your prompt pack - no expiration!</p>
+            <p style="color: #cccccc; margin-bottom: 15px;">Click the button below to download your prompt pack:</p>
+            <a href="${downloadLink}" class="download-btn">Download Your Prompt Pack</a>
+            <p style="font-size: 12px; color: #888; margin-top: 10px;">Direct download link - no login required</p>
           </div>
           
           <p style="margin-top: 30px;">If you have any questions or issues regarding your purchase, please contact our support team and provide your <strong>Purchase ID: ${purchaseId}</strong> for faster assistance.</p>

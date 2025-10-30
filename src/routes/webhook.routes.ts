@@ -134,10 +134,10 @@ async function handlePaymentCaptured(payment: any) {
             customerName,
             order.orderNumber,
             order.purchaseId, // Fix: Use purchaseId instead of order ID
-            order.accessToken || 'N/A',
             products,
             order.totalAmount,
-            firstProduct.pdfPassword
+            firstProduct.pdfPassword,
+            'https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/prompt-pack.pdf' // Placeholder - in a real implementation you would generate a proper link
           )
         });
 

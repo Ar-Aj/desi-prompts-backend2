@@ -8,7 +8,7 @@ import { Order } from '../models/Order.model';
 import { Review } from '../models/Review.model';
 import { Demo } from '../models/Demo.model';
 import { SupportTicket } from '../models/SupportTicket.model';
-import { AccessLog } from '../models/AccessManager.model';
+
 import { authenticate } from '../middleware/auth.middleware';
 import { authorizeAdmin } from '../middleware/admin.middleware';
 import { asyncHandler } from '../middleware/asyncHandler.middleware';
@@ -97,61 +97,6 @@ const pdfUpload = multer({
 // Apply admin authentication to all routes
 router.use(authenticate);
 router.use(authorizeAdmin);
-
-// Get access logs
-router.get('/access-logs', asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { page = 1, limit = 20, orderId, productId, userId, accessGranted } = req.query;
-    const skip = (Number(page) - 1) * Number(limit);
-
-    // Build filter object
-    const filter: any = {};
-    
-    if (orderId) {
-      filter.orderId = orderId;
-    }
-    
-    if (productId) {
-      filter.productId = productId;
-    }
-    
-    if (userId) {
-      filter.userId = userId;
-    }
-    
-    if (accessGranted !== undefined) {
-      filter.accessGranted = accessGranted === 'true';
-    }
-
-    const [accessLogs, total] = await Promise.all([
-      AccessLog.find(filter)
-        .populate('orderId', 'orderNumber purchaseId')
-        .populate('productId', 'name')
-        .populate('userId', 'name email')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit)),
-      AccessLog.countDocuments(filter)
-    ]);
-
-    res.json({
-      success: true,
-      accessLogs,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / Number(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching access logs:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch access logs'
-    });
-  }
-}));
 
 // Get signed URL for S3 object
 router.get('/get-signed-url', asyncHandler(async (req: Request, res: Response) => {

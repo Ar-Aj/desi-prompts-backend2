@@ -134,7 +134,7 @@ router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Resp
       guestName: !userId ? guestName : undefined, // Only set for guest orders
       items: orderItems,
       totalAmount,
-      accessToken: require('crypto').randomBytes(32).toString('hex') // Generate access token
+      // accessToken field removed - direct S3 access used instead
     });
 
     console.log('Order object before save:', JSON.stringify(order, null, 2));
@@ -345,11 +345,11 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
             html: getOrderConfirmationEmail(
               customerName || 'Customer',
               order.orderNumber,
-              order.purchaseId, // Fix: Use purchaseId instead of order ID
-              order.accessToken || 'N/A',
+              order.purchaseId,
               products,
               order.totalAmount,
-              firstProduct.pdfPassword
+              firstProduct.pdfPassword,
+              downloadLink
             )
           });
 
@@ -487,6 +487,11 @@ router.post('/:id/resend-email', authenticate, asyncHandler(async (req: Request,
       return;
     }
 
+    // Generate download link for resend
+    const downloadLink = firstProduct.pdfUrl.startsWith('http') 
+      ? firstProduct.pdfUrl 
+      : `https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/${firstProduct.pdfUrl}`;
+
     await sendEmail({
       to: customerEmail,
       subject: `Order Confirmation - ${order.orderNumber}`,
@@ -494,10 +499,10 @@ router.post('/:id/resend-email', authenticate, asyncHandler(async (req: Request,
         customerName || 'Customer',
         order.orderNumber,
         order.purchaseId,
-        order.accessToken || 'N/A',
         products,
         order.totalAmount,
-        firstProduct.pdfPassword
+        firstProduct.pdfPassword,
+        downloadLink
       )
     });
 
