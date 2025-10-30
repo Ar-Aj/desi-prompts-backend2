@@ -357,7 +357,9 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
   try {
     const { url } = req.query;
     
-    console.log('PDF Proxy Endpoint Hit:', { url });
+    console.log('=== PDF Proxy Endpoint Hit ===');
+    console.log('Requested URL:', url);
+    console.log('Request headers:', req.headers);
     
     if (!url || typeof url !== 'string') {
       console.log('Missing or invalid URL parameter');
@@ -404,7 +406,8 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
       const contentType = response.headers.get('content-type') || 'application/pdf';
       const contentLength = response.headers.get('content-length');
       
-      console.log('Setting response headers:', { contentType, contentLength });
+      console.log('S3 Content-Type:', contentType);
+      console.log('S3 Content-Length:', contentLength);
       
       // Set the appropriate headers for the client
       res.set('Content-Type', contentType);
@@ -415,11 +418,17 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
         res.set('Content-Length', contentLength);
       }
       
+      // Log some info about the response body
+      console.log('S3 Response body type:', typeof response.body);
+      console.log('S3 Response body exists:', !!response.body);
+      
       // Stream the response directly to the client
       if (response.body) {
+        console.log('Streaming response body to client...');
         // Pipe the response body directly to the client response
         // @ts-ignore - Handle stream response
         response.body.pipe(res);
+        console.log('Response streaming completed');
       } else {
         console.error('No response body from S3');
         res.status(500).json({
