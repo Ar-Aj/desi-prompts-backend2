@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { Product } from '../models/Product.model';
-import { Order } from '../models/Order.model';
 import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
