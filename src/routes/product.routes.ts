@@ -357,7 +357,7 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
   try {
     const { url } = req.query;
     
-    console.log('PDF Proxy Endpoint Hit:', { url, headers: req.headers });
+    console.log('PDF Proxy Endpoint Hit:', { url });
     
     if (!url || typeof url !== 'string') {
       console.log('Missing or invalid URL parameter');
@@ -417,6 +417,7 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
       
       // Stream the response directly to the client
       if (response.body) {
+        // Pipe the response body directly to the client response
         // @ts-ignore - Handle stream response
         response.body.pipe(res);
       } else {
