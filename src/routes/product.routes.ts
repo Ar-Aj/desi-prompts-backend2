@@ -371,7 +371,8 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
     }
 
     // Validate that the URL is from our S3 bucket
-    if (!url.startsWith('https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/')) {
+    const allowedBucketUrl = 'https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/';
+    if (!url.startsWith(allowedBucketUrl)) {
       console.log('Invalid URL - not from our S3 bucket:', url);
       res.status(400).json({
         success: false,
@@ -415,7 +416,7 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
       res.set('X-Content-Type-Options', 'nosniff');
       
       // Remove X-Frame-Options to allow embedding in iframes
-      res.set('X-Frame-Options', 'SAMEORIGIN');
+      res.removeHeader('X-Frame-Options');
       
       if (contentLength) {
         res.set('Content-Length', contentLength);
