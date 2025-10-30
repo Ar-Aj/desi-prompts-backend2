@@ -210,7 +210,7 @@ router.get('/test-pdf-content', asyncHandler(async (req: Request, res: Response)
     // Get first 20 bytes to check header
     const buffer = await response.clone().arrayBuffer();
     const bytes = new Uint8Array(buffer, 0, Math.min(20, buffer.byteLength));
-    const header = String.fromCharCode(...bytes);
+    const header = String.fromCharCode.apply(null, Array.from(bytes));
     
     res.json({
       contentType,
