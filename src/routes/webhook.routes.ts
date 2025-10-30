@@ -26,9 +26,19 @@ router.post('/razorpay',
     const signature = req.headers['x-razorpay-signature'] as string;
     
     if (!signature) {
+      console.error('Missing signature in webhook request');
       res.status(400).json({ error: 'Missing signature' });
       return;
     }
+
+    // Log incoming webhook for debugging
+    console.log('Received Razorpay webhook:', {
+      signature: signature ? `${signature.substring(0, 10)}...` : 'NONE',
+      hasBody: !!req.body,
+      eventType: req.body?.event,
+      eventId: req.body?.payload?.payment?.entity?.id || req.body?.payload?.refund?.entity?.id || 'unknown',
+      timestamp: new Date().toISOString()
+    });
 
     // Verify webhook signature
     const isValid = verifyWebhookSignature(
@@ -37,6 +47,10 @@ router.post('/razorpay',
     );
 
     if (!isValid) {
+      console.error('Invalid webhook signature:', {
+        receivedSignature: signature ? `${signature.substring(0, 10)}...` : 'NONE',
+        bodyPreview: JSON.stringify(req.body).substring(0, 100) + '...'
+      });
       res.status(400).json({ error: 'Invalid signature' });
       return;
     }
@@ -59,14 +73,31 @@ router.post('/razorpay',
 
     switch (event) {
       case 'payment.captured':
+        console.log('Processing payment.captured event:', {
+          paymentId: payload.payment.entity.id,
+          orderId: payload.payment.entity.order_id,
+          amount: payload.payment.entity.amount
+        });
         await handlePaymentCaptured(payload.payment.entity);
         break;
       
       case 'payment.failed':
+        console.log('Processing payment.failed event:', {
+          paymentId: payload.payment.entity.id,
+          orderId: payload.payment.entity.order_id,
+          errorCode: payload.payment.entity.error_code,
+          errorDescription: payload.payment.entity.error_description
+        });
         await handlePaymentFailed(payload.payment.entity);
         break;
       
       case 'refund.created':
+        console.log('Processing refund.created event:', {
+          refundId: payload.refund.entity.id,
+          paymentId: payload.refund.entity.payment_id,
+          amount: payload.refund.entity.amount,
+          notes: payload.refund.entity.notes
+        });
         await handleRefundCreated(payload.refund.entity);
         break;
       
@@ -90,22 +121,47 @@ router.post('/razorpay',
 // Handle successful payment
 async function handlePaymentCaptured(payment: any) {
   try {
+    console.log('Handling payment captured event:', {
+      paymentId: payment.id,
+      orderId: payment.order_id,
+      amount: payment.amount,
+      email: payment.email,
+      contact: payment.contact
+    });
+
     const order = await Order.findOne({ 
       razorpayOrderId: payment.order_id 
     }).populate('items.product');
 
     if (!order) {
-      console.error('Order not found for payment:', payment.id);
+      console.error('Order not found for payment:', {
+        paymentId: payment.id,
+        orderId: payment.order_id,
+        email: payment.email
+      });
       return;
     }
+
+    console.log('Found order for payment:', {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      currentStatus: order.paymentStatus
+    });
 
     // Update order status
     order.paymentStatus = 'completed';
     order.razorpayPaymentId = payment.id;
     await order.save();
 
+    console.log('Updated order status to completed');
+
     // Update product sales count (both total and real)
     for (const item of order.items) {
+      console.log('Updating product sales count:', {
+        productId: item.product,
+        quantity: item.quantity
+      });
+      
       await Product.findByIdAndUpdate(item.product, {
         $inc: { 
           salesCount: item.quantity,
@@ -127,6 +183,12 @@ async function handlePaymentCaptured(payment: any) {
         const customerEmail = payment.email || order.guestEmail;
         const customerName = order.guestName || 'Customer';
 
+        console.log('Sending order confirmation email:', {
+          to: customerEmail,
+          orderNumber: order.orderNumber,
+          productCount: order.items.length
+        });
+
         await sendEmail({
           to: customerEmail,
           subject: `Order Confirmation - ${order.orderNumber}`,
@@ -146,6 +208,10 @@ async function handlePaymentCaptured(payment: any) {
         order.pdfDelivered = true;
         order.pdfDeliveredAt = new Date();
         await order.save();
+        
+        console.log('Order confirmation email sent successfully');
+      } else {
+        console.warn('No product found for order item, skipping email send');
       }
     } catch (error) {
       console.error('Failed to send confirmation email:', error);
@@ -178,20 +244,44 @@ async function handlePaymentFailed(payment: any) {
 // Handle refund
 async function handleRefundCreated(refund: any) {
   try {
+    console.log('Handling refund created event:', {
+      refundId: refund.id,
+      paymentId: refund.payment_id,
+      amount: refund.amount,
+      speed: refund.speed,
+      notes: refund.notes
+    });
+
     const order = await Order.findOne({ 
       razorpayPaymentId: refund.payment_id 
     });
 
     if (!order) {
-      console.error('Order not found for refund:', refund.id);
+      console.error('Order not found for refund:', {
+        refundId: refund.id,
+        paymentId: refund.payment_id
+      });
       return;
     }
+
+    console.log('Found order for refund:', {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      currentStatus: order.paymentStatus
+    });
 
     order.paymentStatus = 'refunded';
     await order.save();
 
+    console.log('Updated order status to refunded');
+
     // Decrease product sales count (both total and real)
     for (const item of order.items) {
+      console.log('Decreasing product sales count due to refund:', {
+        productId: item.product,
+        quantity: item.quantity
+      });
+      
       await Product.findByIdAndUpdate(item.product, {
         $inc: { 
           salesCount: -item.quantity,
@@ -199,6 +289,8 @@ async function handleRefundCreated(refund: any) {
         }
       });
     }
+    
+    console.log('Completed refund processing for order:', order.orderNumber);
   } catch (error) {
     console.error('Error handling refund:', error);
   }
