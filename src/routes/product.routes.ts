@@ -352,6 +352,66 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
   }
 }));
 
+// PDF Proxy endpoint for frontend PDF viewer (to avoid CORS issues)
+router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: 'Missing or invalid URL parameter'
+      });
+      return;
+    }
+
+    console.log('PDF Proxy Request for URL:', url);
+    
+    try {
+      // Fetch the PDF from S3
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        console.error('S3 Fetch Error:', response.status, response.statusText);
+        res.status(response.status).json({
+          success: false,
+          error: `Failed to fetch PDF from S3: ${response.status} ${response.statusText}`
+        });
+        return;
+      }
+      
+      // Get the content type and other headers
+      const contentType = response.headers.get('content-type') || 'application/pdf';
+      const contentLength = response.headers.get('content-length');
+      
+      // Set the appropriate headers
+      res.set('Content-Type', contentType);
+      if (contentLength) {
+        res.set('Content-Length', contentLength);
+      }
+      
+      // Stream the response directly to the client
+      // @ts-ignore - Handle stream response
+      response.body.pipe(res);
+      
+    } catch (error: any) {
+      console.error('PDF Proxy Error:', error);
+      res.status(500).json({
+        success: false,
+        error: `Failed to proxy PDF: ${error.message || 'Unknown error'}`
+      });
+      return;
+    }
+  } catch (error) {
+    console.error('PDF Proxy Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error during PDF proxy'
+    });
+    return;
+  }
+}));
+
 // Get all products (public)
 router.get('/', asyncHandler(async (_req: Request, res: Response) => {
   const {
