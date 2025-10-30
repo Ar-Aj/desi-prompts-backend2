@@ -358,29 +358,32 @@ router.get('/proxy-s3-pdf', asyncHandler(async (req: Request, res: Response) => 
     const { url } = req.query;
     
     if (!url || typeof url !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Missing or invalid URL parameter'
       });
+      return;
     }
 
     // Validate that the URL is from our S3 bucket
     const allowedBucketUrl = 'https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/';
     if (!url.startsWith(allowedBucketUrl)) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         error: 'Invalid URL - only S3 bucket URLs are allowed'
       });
+      return;
     }
 
     // Fetch the PDF from S3
     const response = await fetch(url);
     
     if (!response.ok) {
-      return res.status(response.status).json({
+      res.status(response.status).json({
         success: false,
         error: `Failed to fetch PDF from S3: ${response.status} ${response.statusText}`
       });
+      return;
     }
     
     // Get the content type and other headers
