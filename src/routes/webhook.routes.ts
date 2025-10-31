@@ -239,18 +239,36 @@ async function handlePaymentCaptured(payment: any) {
 // Handle failed payment
 async function handlePaymentFailed(payment: any) {
   try {
+    console.log('Handling payment failed event:', {
+      paymentId: payment.id,
+      orderId: payment.order_id,
+      errorCode: payment.error_code,
+      errorDescription: payment.error_description
+    });
+
     const order = await Order.findOne({ 
       razorpayOrderId: payment.order_id 
     });
 
     if (!order) {
-      console.error('Order not found for failed payment:', payment.id);
+      console.error('Order not found for failed payment:', {
+        paymentId: payment.id,
+        orderId: payment.order_id
+      });
       return;
     }
+
+    console.log('Found order for failed payment:', {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      currentStatus: order.paymentStatus
+    });
 
     order.paymentStatus = 'failed';
     order.razorpayPaymentId = payment.id;
     await order.save();
+    
+    console.log('Updated order status to failed');
   } catch (error) {
     console.error('Error handling payment failed:', error);
   }

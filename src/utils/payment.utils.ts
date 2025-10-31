@@ -49,9 +49,22 @@ export const verifyRazorpaySignature = (
   signature: string
 ): boolean => {
   try {
+    console.log('Verifying Razorpay signature for payment verification:', {
+      hasKeyId: !!env.razorpay?.keyId,
+      hasKeySecret: !!env.razorpay?.keySecret,
+      orderIdLength: orderId?.length || 0,
+      paymentIdLength: paymentId?.length || 0,
+      signatureLength: signature?.length || 0
+    });
+    
     // Check if required environment variables are present
     if (!env.razorpay?.keySecret) {
       console.error('Razorpay key secret not configured');
+      return false;
+    }
+    
+    if (!orderId || !paymentId || !signature) {
+      console.error('Missing required parameters for signature verification');
       return false;
     }
     
@@ -61,7 +74,15 @@ export const verifyRazorpaySignature = (
       .update(body.toString())
       .digest('hex');
 
-    return expectedSignature === signature;
+    const isValid = expectedSignature === signature;
+    
+    console.log('Payment signature verification result:', {
+      expectedSignature: expectedSignature.substring(0, 10) + '...',
+      receivedSignature: signature.substring(0, 10) + '...',
+      isValid
+    });
+
+    return isValid;
   } catch (error) {
     console.error('Signature verification error:', error);
     return false;

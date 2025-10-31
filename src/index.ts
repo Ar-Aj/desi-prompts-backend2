@@ -11,6 +11,13 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Configure CORS with specific origins
+const corsOptions = {
+  origin: env.corsOrigins,
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
 // Add a test route BEFORE all other middleware
 app.post('/test-pdf-endpoint', (_req, res) => {
   console.log('Super simple PDF test endpoint hit');
@@ -26,7 +33,7 @@ app.post('/test-pdf-endpoint', (_req, res) => {
 });
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
