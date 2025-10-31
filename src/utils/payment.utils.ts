@@ -73,9 +73,23 @@ export const verifyWebhookSignature = (
   signature: string
 ): boolean => {
   try {
+    console.log('Verifying webhook signature:', {
+      hasWebhookSecret: !!env.razorpay?.webhookSecret,
+      webhookSecretLength: env.razorpay?.webhookSecret?.length || 0,
+      hasBody: !!body,
+      bodyLength: body?.length || 0,
+      hasSignature: !!signature,
+      signatureLength: signature?.length || 0
+    });
+    
     // Check if required environment variables are present
     if (!env.razorpay?.webhookSecret) {
       console.error('Razorpay webhook secret not configured');
+      return false;
+    }
+    
+    if (!body || !signature) {
+      console.error('Missing body or signature for webhook verification');
       return false;
     }
     
@@ -84,7 +98,15 @@ export const verifyWebhookSignature = (
       .update(body)
       .digest('hex');
 
-    return expectedSignature === signature;
+    const isValid = expectedSignature === signature;
+    
+    console.log('Webhook signature verification result:', {
+      expectedSignature: expectedSignature.substring(0, 10) + '...',
+      receivedSignature: signature.substring(0, 10) + '...',
+      isValid
+    });
+
+    return isValid;
   } catch (error) {
     console.error('Webhook signature verification error:', error);
     return false;

@@ -262,9 +262,20 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       paymentStatus: order.paymentStatus
     });
 
+    // Check if we have all required Razorpay parameters for proper verification
+    const hasRazorpayParams = razorpayOrderId && razorpayPaymentId && razorpaySignature;
+    
+    if (!hasRazorpayParams) {
+      console.warn('Missing Razorpay verification parameters - performing manual verification:', {
+        hasOrderId: !!razorpayOrderId,
+        hasPaymentId: !!razorpayPaymentId,
+        hasSignature: !!razorpaySignature
+      });
+    }
+
     // If no Razorpay integration, mark as completed manually
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-      console.log('Manual payment verification');
+      console.log('Manual payment verification - Missing one or more Razorpay parameters');
       // For manual verification or testing without Razorpay
       order.paymentStatus = 'completed';
       order.razorpayPaymentId = 'manual_' + Date.now();

@@ -23,6 +23,20 @@ setInterval(() => {
 router.post('/razorpay', 
   // Raw body parser for webhook signature verification
   asyncHandler(async (req: Request, res: Response) => {
+    console.log('=== WEBHOOK REQUEST RECEIVED ===');
+    console.log('Headers:', req.headers);
+    console.log('Body type:', typeof req.body);
+    console.log('Has body:', !!req.body);
+    
+    if (req.body) {
+      console.log('Body keys:', Object.keys(req.body));
+      try {
+        console.log('Body preview:', JSON.stringify(req.body).substring(0, 200) + '...');
+      } catch (e) {
+        console.log('Body preview error:', e);
+      }
+    }
+    
     const signature = req.headers['x-razorpay-signature'] as string;
     
     if (!signature) {
@@ -103,6 +117,7 @@ router.post('/razorpay',
       
       default:
         console.log(`Unhandled webhook event: ${event}`);
+        console.log('Full event data:', JSON.stringify(req.body, null, 2));
     }
 
     // Mark event as processed
