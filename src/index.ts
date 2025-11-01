@@ -59,6 +59,7 @@ import webhookRoutes from './routes/webhook.routes';
 import supportRoutes from './routes/support.routes';
 import reviewRoutes from './routes/review.routes';
 import subscriberRoutes from './routes/subscriber.routes';
+import razorpayRoutes from './routes/razorpay.routes';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
@@ -68,6 +69,7 @@ app.use('/api/webhook', webhookRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/subscribers', subscriberRoutes);
+app.use('/api/razorpay', razorpayRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
