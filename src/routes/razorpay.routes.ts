@@ -60,11 +60,11 @@ router.get('/events', authenticate, authorizeAdmin, asyncHandler(async (req: Req
 }));
 
 // Get event statistics
-router.get('/stats', authenticate, authorizeAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/stats', authenticate, authorizeAdmin, asyncHandler(async (_req: Request, res: Response) => {
   try {
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    // const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     // Overall stats
     const totalEvents = await RazorpayEvent.countDocuments();
@@ -136,12 +136,14 @@ router.get('/stats', authenticate, authorizeAdmin, asyncHandler(async (req: Requ
         recentEvents: recentEventsList
       }
     });
+    return;
   } catch (error) {
     console.error('Error fetching Razorpay stats:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch Razorpay statistics'
     });
+    return;
   }
 }));
 
@@ -161,12 +163,14 @@ router.get('/events/:id', authenticate, authorizeAdmin, asyncHandler(async (req:
       success: true,
       event
     });
+    return;
   } catch (error) {
     console.error('Error fetching Razorpay event:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch Razorpay event'
     });
+    return;
   }
 }));
 
@@ -180,12 +184,14 @@ router.get('/events/payment/:paymentId', authenticate, authorizeAdmin, asyncHand
       success: true,
       events
     });
+    return;
   } catch (error) {
     console.error('Error fetching Razorpay events by payment ID:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch Razorpay events'
     });
+    return;
   }
 }));
 
