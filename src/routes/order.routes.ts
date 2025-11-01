@@ -275,14 +275,18 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
 
     // If no Razorpay integration, mark as completed manually
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-      console.log('Manual payment verification - Missing one or more Razorpay parameters');
+      console.log('⚠️  Manual payment verification - Missing one or more Razorpay parameters');
+      console.log('This may cause refunds if webhook is not properly configured');
+      
       // For manual verification or testing without Razorpay
       order.paymentStatus = 'completed';
       order.razorpayPaymentId = 'manual_' + Date.now();
       order.razorpaySignature = 'manual_signature';
       await order.save();
+      
+      console.log('✅ Order marked as completed via manual verification');
     } else {
-      console.log('Verifying Razorpay signature');
+      console.log('🔐 Verifying Razorpay signature');
       // Verify signature using the proper utility function
       const { verifyRazorpaySignature } = require('../utils/payment.utils');
       const isValid = verifyRazorpaySignature(
@@ -292,7 +296,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       );
 
       if (!isValid) {
-        console.log('Payment verification failed - invalid signature');
+        console.log('❌ Payment verification failed - invalid signature');
         order.paymentStatus = 'failed';
         await order.save();
         return res.status(400).json({ 
@@ -302,7 +306,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       }
 
       // Update order
-      console.log('Payment verified successfully');
+      console.log('✅ Payment verified successfully via signature verification');
       order.paymentStatus = 'completed';
       order.razorpayPaymentId = razorpayPaymentId;
       order.razorpaySignature = razorpaySignature;
