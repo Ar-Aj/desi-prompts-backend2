@@ -46,3 +46,6 @@ logs
 # Cache
 .cache/
 .parcel-cache/uploads/
+
+# Uploaded files
+uploads/
