@@ -87,7 +87,7 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
     config.razorpay = {
       keyId: process.env.RAZORPAY_KEY_ID,
       keySecret: process.env.RAZORPAY_KEY_SECRET,
-      webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
+      webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'dcbd25aa93a65c25be360b7e9f118a1e', // Use your actual secret as fallback
     };
     
     // Log Razorpay configuration status
@@ -96,7 +96,7 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
       keySecretConfigured: !!process.env.RAZORPAY_KEY_SECRET,
       webhookSecretConfigured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
       keyId: process.env.RAZORPAY_KEY_ID ? `${process.env.RAZORPAY_KEY_ID.substring(0, 5)}...` : 'MISSING',
-      webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ? `${process.env.RAZORPAY_WEBHOOK_SECRET.substring(0, 5)}...` : 'MISSING'
+      webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ? `${process.env.RAZORPAY_WEBHOOK_SECRET.substring(0, 5)}...` : 'USING DEFAULT'
     });
   } else {
     console.warn('⚠️  Razorpay credentials not configured. Payment processing will be disabled.');

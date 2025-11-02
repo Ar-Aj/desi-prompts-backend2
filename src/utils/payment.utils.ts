@@ -105,6 +105,9 @@ export const verifyWebhookSignature = (
     console.log('🔐 WEBHOOK SIGNATURE VERIFICATION STARTED');
     console.log('Verification parameters:', {
       hasWebhookSecret: !!env.razorpay?.webhookSecret,
+      webhookSecretConfigured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
+      envWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ? `${process.env.RAZORPAY_WEBHOOK_SECRET.substring(0, 10)}...` : 'NOT SET',
+      configWebhookSecret: env.razorpay?.webhookSecret ? `${env.razorpay?.webhookSecret.substring(0, 10)}...` : 'NOT SET',
       webhookSecretLength: env.razorpay?.webhookSecret?.length || 0,
       hasBody: !!body,
       bodyLength: body?.length || 0,
@@ -116,6 +119,10 @@ export const verifyWebhookSignature = (
     if (!env.razorpay?.webhookSecret) {
       console.error('❌ CRITICAL: Razorpay webhook secret not configured - This will cause all webhooks to fail and trigger auto-refunds!');
       console.error('Please set RAZORPAY_WEBHOOK_SECRET in your environment variables');
+      console.error('Current env values:', {
+        RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+        envRazorpayWebhookSecret: env.razorpay?.webhookSecret
+      });
       return false;
     }
     
@@ -147,6 +154,12 @@ export const verifyWebhookSignature = (
       console.error('Body length comparison:', {
         receivedBodyLength: body.length,
         first100Chars: body.substring(0, 100)
+      });
+      console.error('Secret comparison:', {
+        expectedLength: expectedSignature.length,
+        receivedLength: signature.length,
+        expectedStart: expectedSignature.substring(0, 20),
+        receivedStart: signature.substring(0, 20)
       });
     } else {
       console.log('✅ WEBHOOK SIGNATURE VERIFICATION SUCCESSFUL');

@@ -66,6 +66,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/webhook', webhookRoutes);
+app.use('/api/webhooks', webhookRoutes); // Add alias for webhook routes
 app.use('/api/support', supportRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/subscribers', subscriberRoutes);
