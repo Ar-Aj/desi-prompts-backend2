@@ -125,9 +125,11 @@ router.use('/razorpay', (req, _res, next) => {
   console.log('🔧 WEBHOOK RAW BODY CAPTURE MIDDLEWARE ACTIVATED');
   console.log('Content-Type:', req.headers['content-type']);
   console.log('Content-Length:', req.headers['content-length']);
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
   
-  // Only capture raw body for JSON content type
-  if (req.headers['content-type'] === 'application/json') {
+  // Only capture raw body for JSON content type and POST requests
+  if (req.method === 'POST' && req.headers['content-type'] === 'application/json') {
     console.log('Setting up raw body capture for JSON content');
     let data = '';
     req.on('data', chunk => {
@@ -142,7 +144,7 @@ router.use('/razorpay', (req, _res, next) => {
       next();
     });
   } else {
-    console.log('Skipping raw body capture, content-type:', req.headers['content-type']);
+    console.log('Skipping raw body capture, method:', req.method, 'content-type:', req.headers['content-type']);
     next();
   }
 });
@@ -152,6 +154,8 @@ router.post('/razorpay',
   asyncHandler(async (req: Request, res: Response) => {
     console.log('=== 🔴 CRITICAL: RAZORPAY WEBHOOK REQUEST RECEIVED ===');
     console.log('🚨 TIMESTAMP:', new Date().toISOString());
+    console.log('🚨 METHOD:', req.method);
+    console.log('🚨 URL:', req.url);
     console.log('🚨 HEADERS:', JSON.stringify(req.headers, null, 2));
     console.log('🚨 BODY TYPE:', typeof req.body);
     console.log('🚨 HAS BODY:', !!req.body);
@@ -176,27 +180,20 @@ router.post('/razorpay',
     const signature = req.headers['x-razorpay-signature'] as string;
     console.log('🚨 SIGNATURE:', signature ? `${signature.substring(0, 20)}...` : 'NONE');
     
+    // CRITICAL: If we don't have a signature, this is NOT a Razorpay webhook
     if (!signature) {
-      console.error('❌ CRITICAL ERROR: Missing signature in webhook request');
-      console.error('This will cause auto-refunds! Razorpay requires signature verification.');
+      console.log('⚠️ This request is NOT a Razorpay webhook - no signature found');
+      console.log('⚠️ This might be a health check or other request to the webhook endpoint');
       
-      // Save failed event to database even if signature is missing
-      try {
-        const eventId = req.body?.payload?.payment?.entity?.id || req.body?.payload?.refund?.entity?.id || 'unknown';
-        await RazorpayEvent.create({
-          eventId,
-          eventType: req.body?.event || 'unknown',
-          payload: req.body,
-          signature: 'MISSING',
-          status: 'failed',
-          errorMessage: 'Missing signature'
-        });
-        console.log('💾 Saved failed webhook event to database (missing signature)');
-      } catch (error) {
-        console.error('❌ Failed to save failed webhook event:', error);
+      // Return success for health checks
+      if (req.body && req.body.event === 'health.check') {
+        console.log('Health check request - returning success');
+        res.json({ status: 'ok' });
+        return;
       }
       
-      res.status(400).json({ error: 'Missing signature' });
+      // For other non-webhook requests, return 404
+      res.status(404).json({ error: 'Not a Razorpay webhook' });
       return;
     }
 
