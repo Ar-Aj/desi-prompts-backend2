@@ -64,7 +64,7 @@ setInterval(() => {
 }, 60 * 60 * 1000); // Every hour
 
 // Raw body parser middleware for Razorpay webhooks
-const rawBodyParser = (req: Request, res: Response, next: Function) => {
+const rawBodyParser = (req: Request, _res: Response, next: Function) => {
   console.log('🔧 RAW BODY PARSER MIDDLEWARE ACTIVATED');
   console.log('Content-Type:', req.headers['content-type']);
   
