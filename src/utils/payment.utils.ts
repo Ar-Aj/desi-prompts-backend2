@@ -131,10 +131,18 @@ export const verifyWebhookSignature = (
       return false;
     }
     
+    // Ensure body is a string
+    const bodyString = typeof body === 'string' ? body : JSON.stringify(body);
+    console.log('Body for signature verification:', {
+      originalType: typeof body,
+      finalType: typeof bodyString,
+      length: bodyString.length
+    });
+    
     console.log('Generating expected signature using webhook secret');
     const expectedSignature = crypto
       .createHmac('sha256', env.razorpay.webhookSecret)
-      .update(body)
+      .update(bodyString)
       .digest('hex');
 
     const isValid = expectedSignature === signature;
@@ -152,14 +160,22 @@ export const verifyWebhookSignature = (
       console.error('2. Body content mismatch (incorrect raw body parsing)');
       console.error('3. Network issues causing data corruption');
       console.error('Body length comparison:', {
-        receivedBodyLength: body.length,
-        first100Chars: body.substring(0, 100)
+        receivedBodyLength: bodyString.length,
+        first100Chars: bodyString.substring(0, 100)
       });
       console.error('Secret comparison:', {
         expectedLength: expectedSignature.length,
         receivedLength: signature.length,
         expectedStart: expectedSignature.substring(0, 20),
         receivedStart: signature.substring(0, 20)
+      });
+      
+      // Log detailed debugging information
+      console.error('DETAILED DEBUGGING INFO:', {
+        bodyString: bodyString.substring(0, Math.min(200, bodyString.length)) + (bodyString.length > 200 ? '...' : ''),
+        bodyLength: bodyString.length,
+        signature: signature,
+        expectedSignature: expectedSignature
       });
     } else {
       console.log('✅ WEBHOOK SIGNATURE VERIFICATION SUCCESSFUL');

@@ -5,18 +5,39 @@ import { RazorpayEvent } from '../models/RazorpayEvent.model';
 import { asyncHandler } from '../middleware/error.middleware';
 import { verifyWebhookSignature } from '../utils/payment.utils';
 import { sendEmail, getOrderConfirmationEmail } from '../utils/email.utils';
+import { env } from '../config/environment.config';
 
 const router: Router = Router();
 
 // Health check endpoint for webhook
 router.get('/health', (_req: Request, res: Response) => {
+  const webhookSecretConfigured = !!process.env.RAZORPAY_WEBHOOK_SECRET;
+  const razorpayKeyIdConfigured = !!process.env.RAZORPAY_KEY_ID;
+  const razorpayKeySecretConfigured = !!process.env.RAZORPAY_KEY_SECRET;
+  
+  // Check if webhook secret matches what we're using
+  const configWebhookSecret = env.razorpay?.webhookSecret;
+  const envWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  
+  const secretsMatch = configWebhookSecret === envWebhookSecret;
+  
   res.json({ 
     status: 'ok', 
     message: 'Webhook endpoint is active and ready to receive events',
     timestamp: new Date().toISOString(),
     webhookUrl: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/api/webhook/razorpay`,
-    webhookSecretConfigured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
-    razorpayKeyIdConfigured: !!process.env.RAZORPAY_KEY_ID
+    configuration: {
+      webhookSecretConfigured,
+      razorpayKeyIdConfigured,
+      razorpayKeySecretConfigured,
+      secretsMatch,
+      configWebhookSecret: configWebhookSecret ? `${configWebhookSecret.substring(0, 5)}...` : 'NOT SET',
+      envWebhookSecret: envWebhookSecret ? `${envWebhookSecret.substring(0, 5)}...` : 'NOT SET'
+    },
+    razorpay: {
+      keyId: process.env.RAZORPAY_KEY_ID ? `${process.env.RAZORPAY_KEY_ID.substring(0, 10)}...` : 'NOT SET',
+      keySecretConfigured: !!process.env.RAZORPAY_KEY_SECRET
+    }
   });
 });
 
@@ -32,13 +53,49 @@ router.post('/test', (req: Request, res: Response) => {
     console.log('Raw body:', req.rawBody.substring(0, 200) + '...');
   }
   
+  // Test webhook secret configuration
+  const webhookSecret = env.razorpay?.webhookSecret;
+  const hasWebhookSecret = !!webhookSecret;
+  
   res.json({ 
     status: 'ok', 
     message: 'Webhook test endpoint working',
     timestamp: new Date().toISOString(),
     hasRawBody: !!(req as any).rawBody,
     // @ts-ignore
-    rawBodyLength: (req as any).rawBody ? (req as any).rawBody.length : 0
+    rawBodyLength: (req as any).rawBody ? (req as any).rawBody.length : 0,
+    webhookSecretConfigured: hasWebhookSecret,
+    webhookSecretPreview: webhookSecret ? `${webhookSecret.substring(0, 10)}...` : 'NOT SET',
+    webhookSecretLength: webhookSecret ? webhookSecret.length : 0
+  });
+});
+
+// Debug endpoint to test webhook secret verification
+router.post('/debug-verify', (req: Request, res: Response) => {
+  console.log('=== WEBHOOK DEBUG VERIFICATION ENDPOINT CALLED ===');
+  
+  const { body, signature } = req.body;
+  
+  if (!body || !signature) {
+    return res.status(400).json({ 
+      error: 'Both body and signature are required for verification' 
+    });
+  }
+  
+  console.log('Debug verification request:', {
+    bodyLength: typeof body === 'string' ? body.length : JSON.stringify(body).length,
+    signatureLength: signature.length,
+    signaturePreview: signature.substring(0, 20) + '...'
+  });
+  
+  const isValid = verifyWebhookSignature(
+    typeof body === 'string' ? body : JSON.stringify(body),
+    signature
+  );
+  
+  return res.json({ 
+    isValid,
+    webhookSecret: env.razorpay?.webhookSecret ? `${env.razorpay?.webhookSecret.substring(0, 10)}...` : 'NOT SET'
   });
 });
 
@@ -65,11 +122,13 @@ setInterval(() => {
 
 // Middleware to capture raw body for webhook signature verification
 router.use('/razorpay', (req, _res, next) => {
-  console.log('🔧 WEBHOOK RAW BODY CAPTURE MIDDLEWARE');
+  console.log('🔧 WEBHOOK RAW BODY CAPTURE MIDDLEWARE ACTIVATED');
   console.log('Content-Type:', req.headers['content-type']);
+  console.log('Content-Length:', req.headers['content-length']);
   
+  // Only capture raw body for JSON content type
   if (req.headers['content-type'] === 'application/json') {
-    console.log('Setting up raw body capture');
+    console.log('Setting up raw body capture for JSON content');
     let data = '';
     req.on('data', chunk => {
       data += chunk;
@@ -77,6 +136,7 @@ router.use('/razorpay', (req, _res, next) => {
     });
     req.on('end', () => {
       console.log('Raw body capture complete:', data.length, 'bytes');
+      console.log('Raw body content:', data.substring(0, Math.min(200, data.length)) + (data.length > 200 ? '...' : ''));
       // @ts-ignore - Adding rawBody property to request
       req.rawBody = data;
       next();
@@ -119,6 +179,23 @@ router.post('/razorpay',
     if (!signature) {
       console.error('❌ CRITICAL ERROR: Missing signature in webhook request');
       console.error('This will cause auto-refunds! Razorpay requires signature verification.');
+      
+      // Save failed event to database even if signature is missing
+      try {
+        const eventId = req.body?.payload?.payment?.entity?.id || req.body?.payload?.refund?.entity?.id || 'unknown';
+        await RazorpayEvent.create({
+          eventId,
+          eventType: req.body?.event || 'unknown',
+          payload: req.body,
+          signature: 'MISSING',
+          status: 'failed',
+          errorMessage: 'Missing signature'
+        });
+        console.log('💾 Saved failed webhook event to database (missing signature)');
+      } catch (error) {
+        console.error('❌ Failed to save failed webhook event:', error);
+      }
+      
       res.status(400).json({ error: 'Missing signature' });
       return;
     }
@@ -134,9 +211,10 @@ router.post('/razorpay',
     });
 
     // Verify webhook signature using raw body
-    const bodyToVerify = rawBody || JSON.stringify(req.body);
+    const bodyToVerify = rawBody || (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
     console.log('🔐 WEBHOOK SIGNATURE VERIFICATION DATA:', {
       usingRawBody: !!rawBody,
+      usingReqBody: !rawBody && !!req.body,
       bodyLength: bodyToVerify.length,
       bodyPreview: bodyToVerify.substring(0, Math.min(100, bodyToVerify.length)) + (bodyToVerify.length > 100 ? '...' : '')
     });
@@ -181,13 +259,14 @@ router.post('/razorpay',
 
     // Parse the raw body to JSON if we're using it
     let parsedBody = req.body;
-    if (rawBody && rawBody !== JSON.stringify(req.body)) {
+    if (rawBody) {
       try {
         console.log('🔄 Parsing raw body to JSON');
         parsedBody = JSON.parse(rawBody);
         console.log('✅ Raw body parsed successfully');
       } catch (parseError) {
         console.error('❌ Failed to parse raw body:', parseError);
+        console.error('Falling back to req.body');
         // Fall back to req.body if parsing fails
         parsedBody = req.body;
       }
@@ -415,6 +494,7 @@ router.post('/razorpay',
     // In production, this should be handled by a database with TTL
     setTimeout(() => {
       processedEvents.delete(eventId);
+      console.log(`🧹 Cleaned up processed event ${eventId} from memory cache`);
     }, EVENT_TTL);
 
     res.json({ status: 'ok' });
@@ -552,6 +632,23 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
       razorpayOrderId: order.razorpayOrderId
     });
 
+    // Check if order is already completed to prevent duplicate processing
+    if (order.paymentStatus === 'completed') {
+      console.log('⚠️ ORDER ALREADY COMPLETED, SKIPPING PROCESSING');
+      if (eventId) {
+        try {
+          await RazorpayEvent.findByIdAndUpdate(eventId, {
+            status: 'processed',
+            errorMessage: 'Order already completed'
+          });
+          console.log('💾 Updated webhook event status to processed: Order already completed');
+        } catch (error) {
+          console.error('❌ Failed to update webhook event status:', error);
+        }
+      }
+      return;
+    }
+
     // Update order status
     console.log('🔄 UPDATING ORDER STATUS TO COMPLETED');
     order.paymentStatus = 'completed';
@@ -567,12 +664,17 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
         quantity: item.quantity
       });
       
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { 
-          salesCount: item.quantity,
-          realSalesCount: item.quantity // Increment real sales for actual orders
-        }
-      });
+      try {
+        await Product.findByIdAndUpdate(item.product, {
+          $inc: { 
+            salesCount: item.quantity,
+            realSalesCount: item.quantity // Increment real sales for actual orders
+          }
+        });
+        console.log('✅ Updated product sales count for product:', item.product);
+      } catch (error) {
+        console.error('❌ Failed to update product sales count:', error);
+      }
     }
 
     // Send confirmation email
@@ -595,27 +697,31 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
           productCount: order.items.length
         });
 
-        await sendEmail({
-          to: customerEmail,
-          subject: `Order Confirmation - ${order.orderNumber}`,
-          html: getOrderConfirmationEmail(
-            customerName,
-            order.orderNumber,
-            order.purchaseId, // Fix: Use purchaseId instead of order ID
-            products,
-            order.totalAmount,
-            firstProduct.pdfPassword,
-            'https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/prompt-pack.pdf' // Placeholder - in a real implementation you would generate a proper link
-          )
-        });
+        if (customerEmail) {
+          await sendEmail({
+            to: customerEmail,
+            subject: `Order Confirmation - ${order.orderNumber}`,
+            html: getOrderConfirmationEmail(
+              customerName,
+              order.orderNumber,
+              order.purchaseId, // Fix: Use purchaseId instead of order ID
+              products,
+              order.totalAmount,
+              firstProduct.pdfPassword,
+              'https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/prompt-pack.pdf' // Placeholder - in a real implementation you would generate a proper link
+            )
+          });
 
-        order.emailSent = true;
-        order.emailSentAt = new Date();
-        order.pdfDelivered = true;
-        order.pdfDeliveredAt = new Date();
-        await order.save();
-        
-        console.log('📧 ORDER CONFIRMATION EMAIL SENT SUCCESSFULLY');
+          order.emailSent = true;
+          order.emailSentAt = new Date();
+          order.pdfDelivered = true;
+          order.pdfDeliveredAt = new Date();
+          await order.save();
+          
+          console.log('📧 ORDER CONFIRMATION EMAIL SENT SUCCESSFULLY');
+        } else {
+          console.warn('⚠️ NO CUSTOMER EMAIL FOUND, SKIPPING EMAIL SEND');
+        }
       } else {
         console.warn('⚠️ NO PRODUCT FOUND FOR ORDER ITEM, SKIPPING EMAIL SEND');
       }
