@@ -90,40 +90,42 @@ router.use('/razorpay', (req, _res, next) => {
 // Razorpay webhook endpoint
 router.post('/razorpay', 
   asyncHandler(async (req: Request, res: Response) => {
-    console.log('=== RAZORPAY WEBHOOK REQUEST RECEIVED ===');
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('Headers:', req.headers);
-    console.log('Body type:', typeof req.body);
-    console.log('Has body:', !!req.body);
+    console.log('=== 🔴 CRITICAL: RAZORPAY WEBHOOK REQUEST RECEIVED ===');
+    console.log('🚨 TIMESTAMP:', new Date().toISOString());
+    console.log('🚨 HEADERS:', JSON.stringify(req.headers, null, 2));
+    console.log('🚨 BODY TYPE:', typeof req.body);
+    console.log('🚨 HAS BODY:', !!req.body);
     
     // @ts-ignore - Accessing rawBody property
     const rawBody = req.rawBody;
-    console.log('Raw body available:', !!rawBody);
+    console.log('🚨 RAW BODY AVAILABLE:', !!rawBody);
     if (rawBody) {
-      console.log('Raw body length:', rawBody.length);
-      console.log('Raw body preview:', rawBody.substring(0, 200) + '...');
+      console.log('🚨 RAW BODY LENGTH:', rawBody.length);
+      console.log('🚨 RAW BODY PREVIEW:', rawBody.substring(0, Math.min(200, rawBody.length)) + (rawBody.length > 200 ? '...' : ''));
     }
     
     if (req.body) {
-      console.log('Body keys:', Object.keys(req.body));
+      console.log('🚨 BODY KEYS:', Object.keys(req.body));
       try {
-        console.log('Body preview:', JSON.stringify(req.body).substring(0, 200) + '...');
+        console.log('🚨 BODY PREVIEW:', JSON.stringify(req.body, null, 2).substring(0, 200) + '...');
       } catch (e) {
-        console.log('Body preview error:', e);
+        console.log('🚨 BODY PREVIEW ERROR:', e);
       }
     }
     
     const signature = req.headers['x-razorpay-signature'] as string;
+    console.log('🚨 SIGNATURE:', signature ? `${signature.substring(0, 20)}...` : 'NONE');
     
     if (!signature) {
-      console.error('❌ Missing signature in webhook request');
+      console.error('❌ CRITICAL ERROR: Missing signature in webhook request');
+      console.error('This will cause auto-refunds! Razorpay requires signature verification.');
       res.status(400).json({ error: 'Missing signature' });
       return;
     }
 
     // Log incoming webhook for debugging
-    console.log('Received Razorpay webhook:', {
-      signature: signature ? `${signature.substring(0, 10)}...` : 'NONE',
+    console.log('🚨 RECEIVED RAZORPAY WEBHOOK:', {
+      signature: signature ? `${signature.substring(0, 20)}...` : 'NONE',
       hasBody: !!req.body,
       hasRawBody: !!rawBody,
       eventType: req.body?.event,
@@ -133,10 +135,10 @@ router.post('/razorpay',
 
     // Verify webhook signature using raw body
     const bodyToVerify = rawBody || JSON.stringify(req.body);
-    console.log('Webhook body for signature verification:', {
+    console.log('🔐 WEBHOOK SIGNATURE VERIFICATION DATA:', {
       usingRawBody: !!rawBody,
       bodyLength: bodyToVerify.length,
-      bodyPreview: bodyToVerify.substring(0, 100) + '...'
+      bodyPreview: bodyToVerify.substring(0, Math.min(100, bodyToVerify.length)) + (bodyToVerify.length > 100 ? '...' : '')
     });
     
     const isValid = verifyWebhookSignature(
@@ -145,9 +147,14 @@ router.post('/razorpay',
     );
 
     if (!isValid) {
-      console.error('❌ Invalid webhook signature:', {
-        receivedSignature: signature ? `${signature.substring(0, 10)}...` : 'NONE',
-        bodyPreview: bodyToVerify.substring(0, 100) + '...'
+      console.error('❌ CRITICAL ERROR: Invalid webhook signature');
+      console.error('This will cause auto-refunds! Possible causes:');
+      console.error('1. Webhook secret mismatch between app and Razorpay dashboard');
+      console.error('2. Raw body parsing issue');
+      console.error('3. Network corruption');
+      console.error('Received data:', {
+        signature: signature ? `${signature.substring(0, 20)}...` : 'NONE',
+        bodyPreview: bodyToVerify.substring(0, Math.min(100, bodyToVerify.length)) + (bodyToVerify.length > 100 ? '...' : '')
       });
       
       // Save failed event to database
@@ -161,36 +168,45 @@ router.post('/razorpay',
           status: 'failed',
           errorMessage: 'Invalid signature'
         });
+        console.log('💾 Saved failed webhook event to database');
       } catch (error) {
-        console.error('Failed to save failed webhook event:', error);
+        console.error('❌ Failed to save failed webhook event:', error);
       }
       
       res.status(400).json({ error: 'Invalid signature' });
       return;
     }
 
+    console.log('✅ WEBHOOK SIGNATURE VERIFIED SUCCESSFULLY');
+
     // Parse the raw body to JSON if we're using it
     let parsedBody = req.body;
     if (rawBody && rawBody !== JSON.stringify(req.body)) {
       try {
-        console.log('Parsing raw body to JSON');
+        console.log('🔄 Parsing raw body to JSON');
         parsedBody = JSON.parse(rawBody);
-        console.log('Raw body parsed successfully');
+        console.log('✅ Raw body parsed successfully');
       } catch (parseError) {
-        console.error('Failed to parse raw body:', parseError);
+        console.error('❌ Failed to parse raw body:', parseError);
         // Fall back to req.body if parsing fails
         parsedBody = req.body;
       }
     }
 
     const { event, payload } = parsedBody;
+    console.log('📄 WEBHOOK EVENT DETAILS:', {
+      event,
+      hasPayload: !!payload,
+      payloadKeys: payload ? Object.keys(payload) : []
+    });
     
     // Extract event ID for idempotency
     const eventId = payload?.payment?.entity?.id || payload?.refund?.entity?.id || 'unknown';
+    console.log('🆔 EVENT ID FOR IDEMPOTENCY:', eventId);
     
     // Check if event has already been processed (idempotency)
     if (processedEvents.has(eventId)) {
-      console.log(`Duplicate event received and ignored: ${eventId}`);
+      console.log(`🔄 DUPLICATE EVENT RECEIVED AND IGNORED: ${eventId}`);
       
       // Save duplicate event to database
       try {
@@ -202,8 +218,9 @@ router.post('/razorpay',
           status: 'duplicate',
           errorMessage: 'Duplicate event'
         });
+        console.log('💾 Saved duplicate webhook event to database');
       } catch (error) {
-        console.error('Failed to save duplicate webhook event:', error);
+        console.error('❌ Failed to save duplicate webhook event:', error);
       }
       
       res.json({ status: 'ok', message: 'Event already processed' });
@@ -212,7 +229,7 @@ router.post('/razorpay',
 
     // Log request ID and event ID for debugging (without secrets)
     const requestId = req.headers['x-request-id'] as string || 'unknown';
-    console.log(`Processing webhook event - Request ID: ${requestId}, Event ID: ${eventId}, Event: ${event}`);
+    console.log(`🔄 PROCESSING WEBHOOK EVENT - Request ID: ${requestId}, Event ID: ${eventId}, Event: ${event}`);
 
     // Save event to database
     let razorpayEvent: any = null;
@@ -235,23 +252,39 @@ router.post('/razorpay',
         eventData.email = payment.email;
         eventData.contact = payment.contact;
         eventData.method = payment.method;
+        console.log('💳 PAYMENT ENTITY DATA:', {
+          orderId: payment.order_id,
+          paymentId: payment.id,
+          amount: payment.amount,
+          currency: payment.currency,
+          email: payment.email,
+          contact: payment.contact,
+          method: payment.method
+        });
       } else if (payload?.refund?.entity) {
         const refund = payload.refund.entity;
         eventData.refundId = refund.id;
         eventData.paymentId = refund.payment_id;
         eventData.amount = refund.amount;
         eventData.currency = refund.currency;
+        console.log('💸 REFUND ENTITY DATA:', {
+          refundId: refund.id,
+          paymentId: refund.payment_id,
+          amount: refund.amount,
+          currency: refund.currency
+        });
       }
       
       razorpayEvent = await RazorpayEvent.create(eventData);
-      console.log('Saved webhook event to database:', razorpayEvent._id);
+      console.log('💾 SAVED WEBHOOK EVENT TO DATABASE:', razorpayEvent._id);
     } catch (error) {
-      console.error('Failed to save webhook event to database:', error);
+      console.error('❌ FAILED TO SAVE WEBHOOK EVENT TO DATABASE:', error);
     }
 
     switch (event) {
       case 'payment.captured':
-        console.log('Processing payment.captured event:', {
+        console.log('💰 PROCESSING PAYMENT.CAPTURED EVENT');
+        console.log('Payment details:', {
           paymentId: payload.payment.entity.id,
           orderId: payload.payment.entity.order_id,
           amount: payload.payment.entity.amount
@@ -260,7 +293,8 @@ router.post('/razorpay',
         break;
       
       case 'payment.failed':
-        console.log('Processing payment.failed event:', {
+        console.log('❌ PROCESSING PAYMENT.FAILED EVENT');
+        console.log('Payment failure details:', {
           paymentId: payload.payment.entity.id,
           orderId: payload.payment.entity.order_id,
           errorCode: payload.payment.entity.error_code,
@@ -270,7 +304,8 @@ router.post('/razorpay',
         break;
       
       case 'refund.created':
-        console.log('🚨 REFUND CREATED EVENT RECEIVED 🚨', {
+        console.log('🚨 PROCESSING REFUND.CREATED EVENT - AUTO REFUND DETECTED');
+        console.log('Refund details:', {
           refundId: payload.refund.entity.id,
           paymentId: payload.refund.entity.payment_id,
           amount: payload.refund.entity.amount,
@@ -467,7 +502,8 @@ async function handleOrderPaid(order: any, eventId?: string) {
 // Handle successful payment
 async function handlePaymentCaptured(payment: any, eventId?: string) {
   try {
-    console.log('💳 HANDLING PAYMENT CAPTURED EVENT 💳', {
+    console.log('=== 💳 CRITICAL: HANDLING PAYMENT CAPTURED EVENT 💳 ===');
+    console.log('Payment captured details:', {
       paymentId: payment.id,
       orderId: payment.order_id,
       amount: payment.amount,
@@ -479,12 +515,15 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
       capturedAt: payment.captured_at
     });
 
+    console.log('🔍 SEARCHING FOR ORDER WITH RAZORPAY ORDER ID:', payment.order_id);
     const order = await Order.findOne({ 
       razorpayOrderId: payment.order_id 
     }).populate('items.product');
 
     if (!order) {
-      console.error('🚨 CRITICAL: Order not found for payment - This could cause auto-refund:', {
+      console.error('🚨 CRITICAL ERROR: ORDER NOT FOUND FOR PAYMENT');
+      console.error('This is causing auto-refunds! Order must exist for payment to be confirmed.');
+      console.error('Payment details:', {
         paymentId: payment.id,
         orderId: payment.order_id,
         email: payment.email
@@ -497,15 +536,16 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
             status: 'failed',
             errorMessage: 'Order not found'
           });
+          console.log('💾 Updated webhook event status to failed: Order not found');
         } catch (error) {
-          console.error('Failed to update webhook event status:', error);
+          console.error('❌ Failed to update webhook event status:', error);
         }
       }
       
       return;
     }
 
-    console.log('Found order for payment:', {
+    console.log('✅ FOUND ORDER FOR PAYMENT:', {
       orderId: order._id,
       orderNumber: order.orderNumber,
       currentStatus: order.paymentStatus,
@@ -513,13 +553,14 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
     });
 
     // Update order status
+    console.log('🔄 UPDATING ORDER STATUS TO COMPLETED');
     order.paymentStatus = 'completed';
     order.razorpayPaymentId = payment.id;
     await order.save();
-
-    console.log('✅ Updated order status to completed');
+    console.log('✅ UPDATED ORDER STATUS TO COMPLETED');
 
     // Update product sales count (both total and real)
+    console.log('🔄 UPDATING PRODUCT SALES COUNT FOR', order.items.length, 'ITEMS');
     for (const item of order.items) {
       console.log('Updating product sales count:', {
         productId: item.product,
@@ -536,6 +577,7 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
 
     // Send confirmation email
     try {
+      console.log('📧 SENDING ORDER CONFIRMATION EMAIL');
       const products = order.items.map((item: any) => ({
         name: item.name,
         price: item.price
@@ -547,7 +589,7 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
         const customerEmail = payment.email || order.guestEmail;
         const customerName = order.guestName || 'Customer';
 
-        console.log('Sending order confirmation email:', {
+        console.log('Email details:', {
           to: customerEmail,
           orderNumber: order.orderNumber,
           productCount: order.items.length
@@ -573,12 +615,12 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
         order.pdfDeliveredAt = new Date();
         await order.save();
         
-        console.log('📧 Order confirmation email sent successfully');
+        console.log('📧 ORDER CONFIRMATION EMAIL SENT SUCCESSFULLY');
       } else {
-        console.warn('No product found for order item, skipping email send');
+        console.warn('⚠️ NO PRODUCT FOUND FOR ORDER ITEM, SKIPPING EMAIL SEND');
       }
     } catch (error) {
-      console.error('Failed to send confirmation email:', error);
+      console.error('❌ FAILED TO SEND CONFIRMATION EMAIL:', error);
     }
     
     // Update event status if it exists
@@ -587,12 +629,15 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
         await RazorpayEvent.findByIdAndUpdate(eventId, {
           status: 'processed'
         });
+        console.log('💾 UPDATED WEBHOOK EVENT STATUS TO PROCESSED');
       } catch (error) {
-        console.error('Failed to update webhook event status:', error);
+        console.error('❌ Failed to update webhook event status:', error);
       }
     }
+    
+    console.log('=== 🎉 PAYMENT CAPTURED HANDLING COMPLETE ===');
   } catch (error) {
-    console.error('🚨 CRITICAL ERROR: Failed to handle payment captured event - This could cause auto-refund:', error);
+    console.error('🚨 CRITICAL ERROR: FAILED TO HANDLE PAYMENT CAPTURED EVENT', error);
     
     // Update event status if it exists
     if (eventId) {
@@ -601,8 +646,9 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
           status: 'failed',
           errorMessage: error instanceof Error ? error.message : 'Unknown error'
         });
+        console.log('💾 Updated webhook event status to failed due to error');
       } catch (updateError) {
-        console.error('Failed to update webhook event status:', updateError);
+        console.error('❌ Failed to update webhook event status:', updateError);
       }
     }
   }

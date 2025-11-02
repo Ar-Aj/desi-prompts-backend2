@@ -199,20 +199,10 @@ router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Resp
 // Verify payment
 router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
-    console.log('=== PAYMENT VERIFICATION DEBUG INFO ===');
-    console.log('Raw request body:', req.body);
-    console.log('Request headers:', req.headers);
-    console.log('Content-Type header:', req.headers['content-type']);
-    console.log('Request method:', req.method);
-    console.log('Request URL:', req.url);
-    console.log('Full request keys:', Object.keys(req));
-    console.log('Has body parser:', !!req.body);
-    if (req.body) {
-      console.log('Body type:', typeof req.body);
-      console.log('Body keys:', Object.keys(req.body));
-      console.log('Body stringified:', JSON.stringify(req.body));
-    }
-    console.log('=== END DEBUG INFO ===');
+    console.log('=== 🔴 CRITICAL: PAYMENT VERIFICATION REQUEST RECEIVED ===');
+    console.log('🚨 TIMESTAMP:', new Date().toISOString());
+    console.log('🚨 RAW REQUEST BODY:', JSON.stringify(req.body, null, 2));
+    console.log('🚨 REQUEST HEADERS:', req.headers);
     
     // Fix: Handle all possible parameter names from frontend
     const { 
@@ -226,7 +216,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     // Use the first available order ID parameter
     const searchOrderId = razorpayOrderId || orderId || order_id;
 
-    console.log('Extracted parameters:', {
+    console.log('📄 EXTRACTED PARAMETERS:', {
       razorpayOrderId,
       razorpayPaymentId,
       razorpaySignature,
@@ -237,7 +227,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
 
     // Validate required parameters
     if (!searchOrderId) {
-      console.log('Validation failed: Missing order ID');
+      console.log('❌ VALIDATION FAILED: Missing order ID');
       return res.status(400).json({ 
         success: false,
         error: 'Order ID is required' 
@@ -245,17 +235,17 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     }
 
     // Find order
-    console.log('Looking for order with orderId:', searchOrderId);
+    console.log('🔍 LOOKING FOR ORDER WITH ORDERID:', searchOrderId);
     const order = await Order.findById(searchOrderId).populate('items.product');
     if (!order) {
-      console.log('Order not found for orderId:', searchOrderId);
+      console.log('❌ ORDER NOT FOUND FOR ORDERID:', searchOrderId);
       return res.status(404).json({ 
         success: false,
         error: 'Order not found' 
       });
     }
 
-    console.log('Order found:', {
+    console.log('✅ ORDER FOUND:', {
       id: order._id,
       orderNumber: order.orderNumber,
       razorpayOrderId: order.razorpayOrderId,
@@ -266,17 +256,18 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     const hasRazorpayParams = razorpayOrderId && razorpayPaymentId && razorpaySignature;
     
     if (!hasRazorpayParams) {
-      console.warn('⚠️  Missing Razorpay verification parameters - performing manual verification:', {
+      console.warn('⚠️ MISSING RAZORPAY VERIFICATION PARAMETERS - PERFORMING MANUAL VERIFICATION');
+      console.warn('This may cause refunds if webhook is not properly configured');
+      console.warn('Missing parameters:', {
         hasOrderId: !!razorpayOrderId,
         hasPaymentId: !!razorpayPaymentId,
         hasSignature: !!razorpaySignature
       });
-      console.warn('This may cause refunds if webhook is not properly configured');
     }
 
     // If no Razorpay integration, mark as completed manually
     if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
-      console.log('⚠️  Manual payment verification - Missing one or more Razorpay parameters');
+      console.log('⚠️ MANUAL PAYMENT VERIFICATION - Missing one or more Razorpay parameters');
       console.log('This may cause refunds if webhook is not properly configured');
       
       // For manual verification or testing without Razorpay
@@ -285,9 +276,9 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       order.razorpaySignature = 'manual_signature';
       await order.save();
       
-      console.log('✅ Order marked as completed via manual verification');
+      console.log('✅ ORDER MARKED AS COMPLETED VIA MANUAL VERIFICATION');
     } else {
-      console.log('🔐 Verifying Razorpay signature');
+      console.log('🔐 VERIFYING RAZORPAY SIGNATURE');
       // Verify signature using the proper utility function
       const { verifyRazorpaySignature } = require('../utils/payment.utils');
       const isValid = verifyRazorpaySignature(
@@ -297,7 +288,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       );
 
       if (!isValid) {
-        console.log('❌ Payment verification failed - invalid signature');
+        console.log('❌ PAYMENT VERIFICATION FAILED - INVALID SIGNATURE');
         order.paymentStatus = 'failed';
         await order.save();
         return res.status(400).json({ 
@@ -307,7 +298,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       }
 
       // Update order
-      console.log('✅ Payment verified successfully via signature verification');
+      console.log('✅ PAYMENT VERIFIED SUCCESSFULLY VIA SIGNATURE VERIFICATION');
       order.paymentStatus = 'completed';
       order.razorpayPaymentId = razorpayPaymentId;
       order.razorpaySignature = razorpaySignature;
@@ -315,7 +306,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     }
 
     // Update product sales count (both total and real)
-    console.log('Updating product sales count');
+    console.log('🔄 UPDATING PRODUCT SALES COUNT');
     for (const item of order.items) {
       await Product.findByIdAndUpdate(item.product, {
         $inc: { 
@@ -327,7 +318,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
 
     // Send confirmation email with PDF links
     try {
-      console.log('Preparing to send confirmation email');
+      console.log('📧 PREPARING TO SEND CONFIRMATION EMAIL');
       const products = order.items.map((item: any) => ({
         name: item.name,
         price: item.price
@@ -374,20 +365,21 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
           order.pdfDelivered = true;
           order.pdfDeliveredAt = new Date();
           await order.save();
-          console.log('Order confirmation email sent successfully');
+          console.log('📧 ORDER CONFIRMATION EMAIL SENT SUCCESSFULLY');
         } else {
-          console.log('No customer email found, skipping email send');
+          console.log('⚠️ NO CUSTOMER EMAIL FOUND, SKIPPING EMAIL SEND');
         }
       } else {
-        console.log('No product found for order item, skipping email send');
+        console.log('⚠️ NO PRODUCT FOUND FOR ORDER ITEM, SKIPPING EMAIL SEND');
       }
     } catch (error) {
-      console.error('Email sending failed:', error);
+      console.error('❌ EMAIL SENDING FAILED:', error);
       // Even if email fails, we still want to mark the order as successful
       // The user can use the resend email feature
       console.log('Continuing with order completion despite email failure');
     }
 
+    console.log('=== 🎉 PAYMENT VERIFICATION COMPLETE ===');
     return res.json({
       success: true,
       message: 'Payment verified successfully',
@@ -398,7 +390,7 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       }
     });
   } catch (error) {
-    console.error('Payment verification error:', error);
+    console.error('🚨 CRITICAL ERROR: PAYMENT VERIFICATION FAILED', error);
     // Ensure we always return a valid JSON response
     return res.status(500).json({
       success: false,
