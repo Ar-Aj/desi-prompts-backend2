@@ -14,7 +14,7 @@ router.get('/health', (_req: Request, res: Response) => {
     status: 'ok', 
     message: 'Webhook endpoint is active and ready to receive events',
     timestamp: new Date().toISOString(),
-    webhookUrl: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/api/webhooks/razorpay`,
+    webhookUrl: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/api/webhook/razorpay`,
     webhookSecretConfigured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
     razorpayKeyIdConfigured: !!process.env.RAZORPAY_KEY_ID
   });
@@ -63,37 +63,34 @@ setInterval(() => {
   console.log(`Currently tracking ${processedEvents.size} processed events`);
 }, 60 * 60 * 1000); // Every hour
 
-// Raw body parser middleware for Razorpay webhooks
-const rawBodyParser = (req: Request, _res: Response, next: Function) => {
-  console.log('🔧 RAW BODY PARSER MIDDLEWARE ACTIVATED');
+// Middleware to capture raw body for webhook signature verification
+router.use('/razorpay', (req, _res, next) => {
+  console.log('🔧 WEBHOOK RAW BODY CAPTURE MIDDLEWARE');
   console.log('Content-Type:', req.headers['content-type']);
   
-  // Only parse raw body for webhook requests
   if (req.headers['content-type'] === 'application/json') {
-    console.log('Parsing raw body for webhook');
-    req.setEncoding('utf8');
+    console.log('Setting up raw body capture');
     let data = '';
     req.on('data', chunk => {
       data += chunk;
       console.log('Received chunk:', chunk.length, 'bytes');
     });
     req.on('end', () => {
-      console.log('Raw body parsing complete:', data.length, 'bytes');
+      console.log('Raw body capture complete:', data.length, 'bytes');
       // @ts-ignore - Adding rawBody property to request
       req.rawBody = data;
       next();
     });
   } else {
-    console.log('Skipping raw body parsing, content-type:', req.headers['content-type']);
+    console.log('Skipping raw body capture, content-type:', req.headers['content-type']);
     next();
   }
-};
+});
 
 // Razorpay webhook endpoint
 router.post('/razorpay', 
-  rawBodyParser,
   asyncHandler(async (req: Request, res: Response) => {
-    console.log('=== WEBHOOK REQUEST RECEIVED ===');
+    console.log('=== RAZORPAY WEBHOOK REQUEST RECEIVED ===');
     console.log('Timestamp:', new Date().toISOString());
     console.log('Headers:', req.headers);
     console.log('Body type:', typeof req.body);
@@ -119,7 +116,7 @@ router.post('/razorpay',
     const signature = req.headers['x-razorpay-signature'] as string;
     
     if (!signature) {
-      console.error('Missing signature in webhook request');
+      console.error('❌ Missing signature in webhook request');
       res.status(400).json({ error: 'Missing signature' });
       return;
     }
@@ -148,7 +145,7 @@ router.post('/razorpay',
     );
 
     if (!isValid) {
-      console.error('Invalid webhook signature:', {
+      console.error('❌ Invalid webhook signature:', {
         receivedSignature: signature ? `${signature.substring(0, 10)}...` : 'NONE',
         bodyPreview: bodyToVerify.substring(0, 100) + '...'
       });

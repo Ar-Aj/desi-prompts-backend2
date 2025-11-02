@@ -89,6 +89,15 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
       keySecret: process.env.RAZORPAY_KEY_SECRET,
       webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || '',
     };
+    
+    // Log Razorpay configuration status
+    console.log('💳 Razorpay Configuration Status:', {
+      keyIdConfigured: !!process.env.RAZORPAY_KEY_ID,
+      keySecretConfigured: !!process.env.RAZORPAY_KEY_SECRET,
+      webhookSecretConfigured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
+      keyId: process.env.RAZORPAY_KEY_ID ? `${process.env.RAZORPAY_KEY_ID.substring(0, 5)}...` : 'MISSING',
+      webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ? `${process.env.RAZORPAY_WEBHOOK_SECRET.substring(0, 5)}...` : 'MISSING'
+    });
   } else {
     console.warn('⚠️  Razorpay credentials not configured. Payment processing will be disabled.');
   }
@@ -106,6 +115,13 @@ const getEnvironmentConfig = (): EnvironmentConfig => {
   if (!config.google.clientId || !config.google.clientSecret) {
     console.warn('⚠️  Google OAuth credentials not configured. Google authentication will be disabled.');
   }
+
+  // Log important URLs
+  console.log('🌐 Application URLs:', {
+    frontend: config.frontendUrl,
+    admin: config.adminUrl,
+    corsOrigins: config.corsOrigins
+  });
 
   return config;
 };

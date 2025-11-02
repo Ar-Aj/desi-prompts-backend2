@@ -266,11 +266,12 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
     const hasRazorpayParams = razorpayOrderId && razorpayPaymentId && razorpaySignature;
     
     if (!hasRazorpayParams) {
-      console.warn('Missing Razorpay verification parameters - performing manual verification:', {
+      console.warn('⚠️  Missing Razorpay verification parameters - performing manual verification:', {
         hasOrderId: !!razorpayOrderId,
         hasPaymentId: !!razorpayPaymentId,
         hasSignature: !!razorpaySignature
       });
+      console.warn('This may cause refunds if webhook is not properly configured');
     }
 
     // If no Razorpay integration, mark as completed manually
