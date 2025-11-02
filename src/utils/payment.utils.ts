@@ -94,7 +94,8 @@ export const verifyWebhookSignature = (
   signature: string
 ): boolean => {
   try {
-    console.log('Verifying webhook signature:', {
+    console.log('🔐 WEBHOOK SIGNATURE VERIFICATION STARTED');
+    console.log('Verification parameters:', {
       hasWebhookSecret: !!env.razorpay?.webhookSecret,
       webhookSecretLength: env.razorpay?.webhookSecret?.length || 0,
       hasBody: !!body,
@@ -105,15 +106,17 @@ export const verifyWebhookSignature = (
     
     // Check if required environment variables are present
     if (!env.razorpay?.webhookSecret) {
-      console.error('Razorpay webhook secret not configured');
+      console.error('❌ CRITICAL: Razorpay webhook secret not configured - This will cause all webhooks to fail and trigger auto-refunds!');
+      console.error('Please set RAZORPAY_WEBHOOK_SECRET in your environment variables');
       return false;
     }
     
     if (!body || !signature) {
-      console.error('Missing body or signature for webhook verification');
+      console.error('❌ Missing body or signature for webhook verification');
       return false;
     }
     
+    console.log('Generating expected signature using webhook secret');
     const expectedSignature = crypto
       .createHmac('sha256', env.razorpay.webhookSecret)
       .update(body)
@@ -127,9 +130,23 @@ export const verifyWebhookSignature = (
       isValid
     });
 
+    if (!isValid) {
+      console.error('❌ WEBHOOK SIGNATURE VERIFICATION FAILED - This will cause auto-refunds!');
+      console.error('Possible causes:');
+      console.error('1. Webhook secret mismatch between your app and Razorpay dashboard');
+      console.error('2. Body content mismatch (incorrect raw body parsing)');
+      console.error('3. Network issues causing data corruption');
+      console.error('Body length comparison:', {
+        receivedBodyLength: body.length,
+        first100Chars: body.substring(0, 100)
+      });
+    } else {
+      console.log('✅ WEBHOOK SIGNATURE VERIFICATION SUCCESSFUL');
+    }
+
     return isValid;
   } catch (error) {
-    console.error('Webhook signature verification error:', error);
+    console.error('❌ WEBHOOK SIGNATURE VERIFICATION ERROR:', error);
     return false;
   }
 };

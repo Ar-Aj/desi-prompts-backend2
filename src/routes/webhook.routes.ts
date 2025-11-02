@@ -13,6 +13,40 @@ router.get('/health', (_req: Request, res: Response) => {
   res.json({ 
     status: 'ok', 
     message: 'Webhook endpoint is active and ready to receive events',
+    timestamp: new Date().toISOString(),
+    webhookUrl: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/api/webhooks/razorpay`,
+    webhookSecretConfigured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
+    razorpayKeyIdConfigured: !!process.env.RAZORPAY_KEY_ID
+  });
+});
+
+// Test endpoint for webhook verification
+router.post('/test', (req: Request, res: Response) => {
+  console.log('=== WEBHOOK TEST ENDPOINT CALLED ===');
+  console.log('Headers:', req.headers);
+  console.log('Body:', req.body);
+  
+  // @ts-ignore - Accessing rawBody property
+  if (req.rawBody) {
+    // @ts-ignore
+    console.log('Raw body:', req.rawBody.substring(0, 200) + '...');
+  }
+  
+  res.json({ 
+    status: 'ok', 
+    message: 'Webhook test endpoint working',
+    timestamp: new Date().toISOString(),
+    hasRawBody: !!(req as any).rawBody,
+    // @ts-ignore
+    rawBodyLength: (req as any).rawBody ? (req as any).rawBody.length : 0
+  });
+});
+
+// Add a simple health check at the root of this router as well
+router.get('/', (_req: Request, res: Response) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'Webhook router is active',
     timestamp: new Date().toISOString()
   });
 });
@@ -29,15 +63,49 @@ setInterval(() => {
   console.log(`Currently tracking ${processedEvents.size} processed events`);
 }, 60 * 60 * 1000); // Every hour
 
+// Raw body parser middleware for Razorpay webhooks
+const rawBodyParser = (req: Request, res: Response, next: Function) => {
+  console.log('🔧 RAW BODY PARSER MIDDLEWARE ACTIVATED');
+  console.log('Content-Type:', req.headers['content-type']);
+  
+  // Only parse raw body for webhook requests
+  if (req.headers['content-type'] === 'application/json') {
+    console.log('Parsing raw body for webhook');
+    req.setEncoding('utf8');
+    let data = '';
+    req.on('data', chunk => {
+      data += chunk;
+      console.log('Received chunk:', chunk.length, 'bytes');
+    });
+    req.on('end', () => {
+      console.log('Raw body parsing complete:', data.length, 'bytes');
+      // @ts-ignore - Adding rawBody property to request
+      req.rawBody = data;
+      next();
+    });
+  } else {
+    console.log('Skipping raw body parsing, content-type:', req.headers['content-type']);
+    next();
+  }
+};
+
 // Razorpay webhook endpoint
 router.post('/razorpay', 
-  // Raw body parser for webhook signature verification
+  rawBodyParser,
   asyncHandler(async (req: Request, res: Response) => {
     console.log('=== WEBHOOK REQUEST RECEIVED ===');
     console.log('Timestamp:', new Date().toISOString());
     console.log('Headers:', req.headers);
     console.log('Body type:', typeof req.body);
     console.log('Has body:', !!req.body);
+    
+    // @ts-ignore - Accessing rawBody property
+    const rawBody = req.rawBody;
+    console.log('Raw body available:', !!rawBody);
+    if (rawBody) {
+      console.log('Raw body length:', rawBody.length);
+      console.log('Raw body preview:', rawBody.substring(0, 200) + '...');
+    }
     
     if (req.body) {
       console.log('Body keys:', Object.keys(req.body));
@@ -60,21 +128,29 @@ router.post('/razorpay',
     console.log('Received Razorpay webhook:', {
       signature: signature ? `${signature.substring(0, 10)}...` : 'NONE',
       hasBody: !!req.body,
+      hasRawBody: !!rawBody,
       eventType: req.body?.event,
       eventId: req.body?.payload?.payment?.entity?.id || req.body?.payload?.refund?.entity?.id || 'unknown',
       timestamp: new Date().toISOString()
     });
 
-    // Verify webhook signature
+    // Verify webhook signature using raw body
+    const bodyToVerify = rawBody || JSON.stringify(req.body);
+    console.log('Webhook body for signature verification:', {
+      usingRawBody: !!rawBody,
+      bodyLength: bodyToVerify.length,
+      bodyPreview: bodyToVerify.substring(0, 100) + '...'
+    });
+    
     const isValid = verifyWebhookSignature(
-      JSON.stringify(req.body),
+      bodyToVerify,
       signature
     );
 
     if (!isValid) {
       console.error('Invalid webhook signature:', {
         receivedSignature: signature ? `${signature.substring(0, 10)}...` : 'NONE',
-        bodyPreview: JSON.stringify(req.body).substring(0, 100) + '...'
+        bodyPreview: bodyToVerify.substring(0, 100) + '...'
       });
       
       // Save failed event to database
@@ -96,7 +172,21 @@ router.post('/razorpay',
       return;
     }
 
-    const { event, payload } = req.body;
+    // Parse the raw body to JSON if we're using it
+    let parsedBody = req.body;
+    if (rawBody && rawBody !== JSON.stringify(req.body)) {
+      try {
+        console.log('Parsing raw body to JSON');
+        parsedBody = JSON.parse(rawBody);
+        console.log('Raw body parsed successfully');
+      } catch (parseError) {
+        console.error('Failed to parse raw body:', parseError);
+        // Fall back to req.body if parsing fails
+        parsedBody = req.body;
+      }
+    }
+
+    const { event, payload } = parsedBody;
     
     // Extract event ID for idempotency
     const eventId = payload?.payment?.entity?.id || payload?.refund?.entity?.id || 'unknown';
@@ -110,7 +200,7 @@ router.post('/razorpay',
         await RazorpayEvent.create({
           eventId,
           eventType: event,
-          payload: req.body,
+          payload: parsedBody,
           signature,
           status: 'duplicate',
           errorMessage: 'Duplicate event'
@@ -133,7 +223,7 @@ router.post('/razorpay',
       const eventData: any = {
         eventId,
         eventType: event,
-        payload: req.body,
+        payload: parsedBody,
         signature,
         status: 'processed'
       };
@@ -272,7 +362,7 @@ router.post('/razorpay',
         
       default:
         console.log(`Unhandled webhook event: ${event}`);
-        console.log('Full event data:', JSON.stringify(req.body, null, 2));
+        console.log('Full event data:', JSON.stringify(parsedBody, null, 2));
         
         // Update event status if it exists
         if (razorpayEvent) {
@@ -397,7 +487,7 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
     }).populate('items.product');
 
     if (!order) {
-      console.error('Order not found for payment:', {
+      console.error('🚨 CRITICAL: Order not found for payment - This could cause auto-refund:', {
         paymentId: payment.id,
         orderId: payment.order_id,
         email: payment.email
@@ -505,7 +595,7 @@ async function handlePaymentCaptured(payment: any, eventId?: string) {
       }
     }
   } catch (error) {
-    console.error('Error handling payment captured:', error);
+    console.error('🚨 CRITICAL ERROR: Failed to handle payment captured event - This could cause auto-refund:', error);
     
     // Update event status if it exists
     if (eventId) {
