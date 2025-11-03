@@ -120,10 +120,10 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     return;
   }
 
-  // Check if review already exists
+  // Check if review already exists for this user and product (not order)
   const existingReview = await Review.findOne({
     product: productId,
-    order: orderId
+    user: userId
   });
   if (existingReview) {
     res.status(400).json({ error: 'You have already reviewed this product' });
