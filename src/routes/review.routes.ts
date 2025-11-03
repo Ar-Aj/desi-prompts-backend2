@@ -93,72 +93,91 @@ router.get('/:reviewId', asyncHandler(async (req: Request, res: Response) => {
 
 // Create review (verified purchase only)
 router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async (req: Request, res: Response) => {
-  const { productId, orderId, rating, title, comment } = req.body;
-  const userId = (req as any).user?._id;
-  
-  console.log('Review submission request:', { productId, orderId, userId, rating, title, comment });
+  try {
+    const { productId, orderId, rating, title, comment } = req.body;
+    const userId = (req as any).user?._id;
+    
+    console.log('Review submission request:', { productId, orderId, userId, rating, title, comment });
 
-  // Verify order exists and is completed
-  const order = await Order.findById(orderId);
-  if (!order || order.paymentStatus !== 'completed') {
-    console.log('Order validation failed:', { orderId, orderExists: !!order, paymentStatus: order?.paymentStatus });
-    res.status(400).json({ error: 'Invalid order or payment not completed' });
-    return;
+    // Verify order exists and is completed
+    const order = await Order.findById(orderId);
+    console.log('Order lookup result:', { orderId, orderExists: !!order, order });
+    
+    if (!order || order.paymentStatus !== 'completed') {
+      console.log('Order validation failed:', { orderId, orderExists: !!order, paymentStatus: order?.paymentStatus });
+      res.status(400).json({ error: 'Invalid order or payment not completed' });
+      return;
+    }
+
+    // Verify product is in order
+    const orderItem = order.items.find(item => 
+      item.product.toString() === productId
+    );
+    console.log('Order item lookup result:', { productId, orderItem });
+    
+    if (!orderItem) {
+      console.log('Product not found in order:', { productId, orderItems: order.items });
+      res.status(400).json({ error: 'Product not found in order' });
+      return;
+    }
+
+    // Verify user/guest owns the order
+    const isOwner = 
+      (userId && order.user?.toString() === userId.toString()) ||
+      (!userId && order.guestEmail === req.body.guestEmail);
+    
+    console.log('Order ownership check:', { 
+      userId, 
+      orderUser: order.user, 
+      guestEmail: order.guestEmail, 
+      requestBodyEmail: req.body.guestEmail,
+      isOwner 
+    });
+    
+    if (!isOwner) {
+      console.log('User does not own order:', { userId, orderUser: order.user, guestEmail: order.guestEmail, requestBodyEmail: req.body.guestEmail });
+      res.status(403).json({ error: 'You can only review products you purchased' });
+      return;
+    }
+
+    // Check if review already exists for this order and product
+    const existingReview = await Review.findOne({
+      product: productId,
+      order: orderId
+    });
+    console.log('Existing review check:', { productId, orderId, existingReviewExists: !!existingReview });
+    
+    if (existingReview) {
+      console.log('Review already exists for this order:', { productId, orderId });
+      res.status(400).json({ error: 'You have already reviewed this product with this order' });
+      return;
+    }
+
+    // Create review
+    const review = new Review({
+      product: productId,
+      user: userId,
+      order: orderId,
+      guestName: !userId ? order.guestName : undefined,
+      guestEmail: !userId ? order.guestEmail : undefined,
+      rating,
+      title,
+      comment,
+      isVerifiedPurchase: true
+    });
+
+    await review.save();
+    
+    console.log('Review created successfully:', review._id);
+
+    res.status(201).json({
+      success: true,
+      review
+    });
+  } catch (error) {
+    console.error('Error creating review:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
-
-  // Verify product is in order
-  const orderItem = order.items.find(item => 
-    item.product.toString() === productId
-  );
-  if (!orderItem) {
-    console.log('Product not found in order:', { productId, orderItems: order.items });
-    res.status(400).json({ error: 'Product not found in order' });
-    return;
-  }
-
-  // Verify user/guest owns the order
-  const isOwner = 
-    (userId && order.user?.toString() === userId.toString()) ||
-    (!userId && order.guestEmail === req.body.guestEmail);
-  
-  if (!isOwner) {
-    console.log('User does not own order:', { userId, orderUser: order.user, guestEmail: order.guestEmail, requestBodyEmail: req.body.guestEmail });
-    res.status(403).json({ error: 'You can only review products you purchased' });
-    return;
-  }
-
-  // Check if review already exists for this order and product
-  const existingReview = await Review.findOne({
-    product: productId,
-    order: orderId
-  });
-  if (existingReview) {
-    console.log('Review already exists for this order:', { productId, orderId });
-    res.status(400).json({ error: 'You have already reviewed this product with this order' });
-    return;
-  }
-
-  // Create review
-  const review = new Review({
-    product: productId,
-    user: userId,
-    order: orderId,
-    guestName: !userId ? order.guestName : undefined,
-    guestEmail: !userId ? order.guestEmail : undefined,
-    rating,
-    title,
-    comment,
-    isVerifiedPurchase: true
-  });
-
-  await review.save();
-  
-  console.log('Review created successfully:', review._id);
-
-  res.status(201).json({
-    success: true,
-    review
-  });
 }));
 
 // Mark review as helpful (requires authentication)
