@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Product } from '../models/Product.model';
 import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
@@ -271,6 +272,64 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
 
   const skip = (Number(page) - 1) * Number(limit);
 
+  // Aggregate to get real purchase counts
+  const productsWithPurchaseData = await Product.aggregate([
+    { $match: query },
+    {
+      $lookup: {
+        from: 'orders',
+        let: { productId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $in: ['$$productId', '$items.product'] },
+                  { $eq: ['$paymentStatus', 'completed'] },
+                  { $ne: ['$isFakeOrder', true] } // Exclude fake orders
+                ]
+              }
+            }
+          },
+          {
+            $unwind: '$items'
+          },
+          {
+            $match: {
+              $expr: { $eq: ['$items.product', '$$productId'] }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: '$items.quantity' }
+            }
+          }
+        ],
+        as: 'realPurchaseCount'
+      }
+    },
+    {
+      $addFields: {
+        realPurchaseCount: { $arrayElemAt: ['$realPurchaseCount.count', 0] }
+      }
+    },
+    {
+      $addFields: {
+        realPurchaseCount: { $ifNull: ['$realPurchaseCount', 0] }
+      }
+    },
+    {
+      $sort: { order: 1, createdAt: -1 }
+    },
+    {
+      $skip: skip
+    },
+    {
+      $limit: Number(limit)
+    }
+  ]);
+
   const [products, total] = await Promise.all([
     Product.find(query)
       .sort({ order: 1, createdAt: -1 }) // Sort by order first, then by creation date
@@ -280,8 +339,16 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
     Product.countDocuments(query)
   ]);
 
-  // Convert to plain objects for response
-  const processedProducts = products.map(product => product.toObject());
+  // Merge purchase data with products
+  const processedProducts = products.map(product => {
+    const productObj = product.toObject();
+    const productId = String(product._id);
+    const purchaseData = productsWithPurchaseData.find(p => p._id.toString() === productId);
+    return {
+      ...productObj,
+      realPurchaseCount: purchaseData ? purchaseData.realPurchaseCount : 0
+    };
+  });
 
   res.json({
     success: true,
@@ -319,8 +386,60 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
 
+  // Get real purchase count
+  const purchaseData = await Product.aggregate([
+    { $match: { _id: product._id } },
+    {
+      $lookup: {
+        from: 'orders',
+        let: { productId: '$_id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $in: ['$$productId', '$items.product'] },
+                  { $eq: ['$paymentStatus', 'completed'] },
+                  { $ne: ['$isFakeOrder', true] } // Exclude fake orders
+                ]
+              }
+            }
+          },
+          {
+            $unwind: '$items'
+          },
+          {
+            $match: {
+              $expr: { $eq: ['$items.product', '$$productId'] }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: '$items.quantity' }
+            }
+          }
+        ],
+        as: 'realPurchaseCount'
+      }
+    },
+    {
+      $addFields: {
+        realPurchaseCount: { $arrayElemAt: ['$realPurchaseCount.count', 0] }
+      }
+    },
+    {
+      $addFields: {
+        realPurchaseCount: { $ifNull: ['$realPurchaseCount', 0] }
+      }
+    }
+  ]);
+
   // Convert to plain object for response
-  const processedProduct = product.toObject();
+  const processedProduct = {
+    ...product.toObject(),
+    realPurchaseCount: purchaseData[0] ? purchaseData[0].realPurchaseCount : 0
+  };
 
   res.json({
     success: true,
