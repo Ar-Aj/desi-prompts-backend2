@@ -20,6 +20,8 @@ router.get('/purchase-verification/:productId', authenticate, asyncHandler(async
     'items.product': productId
   }).select('_id orderNumber createdAt items');
 
+  console.log('Purchase verification request:', { productId, userId, ordersCount: orders.length });
+
   // Check if user has already reviewed this product
   const existingReview = await Review.findOne({
     product: productId,
@@ -93,10 +95,13 @@ router.get('/:reviewId', asyncHandler(async (req: Request, res: Response) => {
 router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const { productId, orderId, rating, title, comment } = req.body;
   const userId = (req as any).user?._id;
+  
+  console.log('Review submission request:', { productId, orderId, userId, rating, title, comment });
 
   // Verify order exists and is completed
   const order = await Order.findById(orderId);
   if (!order || order.paymentStatus !== 'completed') {
+    console.log('Order validation failed:', { orderId, orderExists: !!order, paymentStatus: order?.paymentStatus });
     res.status(400).json({ error: 'Invalid order or payment not completed' });
     return;
   }
@@ -106,6 +111,7 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     item.product.toString() === productId
   );
   if (!orderItem) {
+    console.log('Product not found in order:', { productId, orderItems: order.items });
     res.status(400).json({ error: 'Product not found in order' });
     return;
   }
@@ -116,17 +122,19 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     (!userId && order.guestEmail === req.body.guestEmail);
   
   if (!isOwner) {
+    console.log('User does not own order:', { userId, orderUser: order.user, guestEmail: order.guestEmail, requestBodyEmail: req.body.guestEmail });
     res.status(403).json({ error: 'You can only review products you purchased' });
     return;
   }
 
-  // Check if review already exists for this user and product (not order)
+  // Check if review already exists for this order and product
   const existingReview = await Review.findOne({
     product: productId,
-    user: userId
+    order: orderId
   });
   if (existingReview) {
-    res.status(400).json({ error: 'You have already reviewed this product' });
+    console.log('Review already exists for this order:', { productId, orderId });
+    res.status(400).json({ error: 'You have already reviewed this product with this order' });
     return;
   }
 
@@ -144,6 +152,8 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
   });
 
   await review.save();
+  
+  console.log('Review created successfully:', review._id);
 
   res.status(201).json({
     success: true,
