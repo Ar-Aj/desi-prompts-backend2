@@ -20,7 +20,7 @@ router.get('/purchase-verification/:productId', authenticate, asyncHandler(async
     'items.product': productId
   }).select('_id orderNumber createdAt items');
 
-  console.log('Purchase verification request:', { productId, userId, ordersCount: orders.length });
+  console.log('Purchase verification request is:', { productId, userId, ordersCount: orders.length });
 
   // Check if user has already reviewed this product
   const existingReview = await Review.findOne({
