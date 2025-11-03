@@ -97,63 +97,94 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     const { productId, orderId, rating, title, comment } = req.body;
     const userId = (req as any).user?._id;
     
-    console.log('Review submission request:', { productId, orderId, userId, rating, title, comment });
+    console.log('=== REVIEW SUBMISSION DEBUG INFO ===');
+    console.log('Request body:', req.body);
+    console.log('User ID from token:', userId);
+    console.log('Product ID:', productId);
+    console.log('Order ID:', orderId);
+    console.log('Rating:', rating);
+    console.log('Title:', title);
+    console.log('Comment length:', comment?.length);
 
     // Verify order exists and is completed
+    console.log('Looking up order...');
     const order = await Order.findById(orderId);
-    console.log('Order lookup result:', { orderId, orderExists: !!order, order });
+    console.log('Order lookup result:', { 
+      orderId, 
+      orderExists: !!order, 
+      orderPaymentStatus: order?.paymentStatus,
+      orderUserId: order?.user?.toString(),
+      orderGuestEmail: order?.guestEmail
+    });
     
-    if (!order || order.paymentStatus !== 'completed') {
-      console.log('Order validation failed:', { orderId, orderExists: !!order, paymentStatus: order?.paymentStatus });
-      res.status(400).json({ error: 'Invalid order or payment not completed' });
+    if (!order) {
+      console.log('ERROR: Order not found');
+      res.status(400).json({ error: 'Order not found' });
+      return;
+    }
+    
+    if (order.paymentStatus !== 'completed') {
+      console.log('ERROR: Order not completed, status:', order.paymentStatus);
+      res.status(400).json({ error: `Order not completed. Current status: ${order.paymentStatus}` });
       return;
     }
 
     // Verify product is in order
-    const orderItem = order.items.find(item => 
-      item.product.toString() === productId
-    );
-    console.log('Order item lookup result:', { productId, orderItem });
+    console.log('Checking if product is in order items...');
+    console.log('Order items:', order.items);
+    const orderItem = order.items.find(item => {
+      const itemProductId = item.product.toString();
+      const isMatch = itemProductId === productId;
+      console.log(`Comparing item product ID ${itemProductId} with request product ID ${productId}: ${isMatch}`);
+      return isMatch;
+    });
     
     if (!orderItem) {
-      console.log('Product not found in order:', { productId, orderItems: order.items });
-      res.status(400).json({ error: 'Product not found in order' });
+      console.log('ERROR: Product not found in order');
+      res.status(400).json({ error: 'Product not found in your order' });
       return;
     }
 
     // Verify user/guest owns the order
-    const isOwner = 
-      (userId && order.user?.toString() === userId.toString()) ||
-      (!userId && order.guestEmail === req.body.guestEmail);
+    console.log('Verifying order ownership...');
+    console.log('Order user ID:', order.user?.toString());
+    console.log('Request user ID:', userId);
+    console.log('Order guest email:', order.guestEmail);
+    console.log('Request guest email:', req.body.guestEmail);
     
-    console.log('Order ownership check:', { 
-      userId, 
-      orderUser: order.user, 
-      guestEmail: order.guestEmail, 
-      requestBodyEmail: req.body.guestEmail,
-      isOwner 
-    });
+    const isOwner = 
+      (userId && order.user && order.user.toString() === userId.toString()) ||
+      (!userId && order.guestEmail && order.guestEmail === req.body.guestEmail);
+    
+    console.log('Ownership verification result:', isOwner);
     
     if (!isOwner) {
-      console.log('User does not own order:', { userId, orderUser: order.user, guestEmail: order.guestEmail, requestBodyEmail: req.body.guestEmail });
-      res.status(403).json({ error: 'You can only review products you purchased' });
+      console.log('ERROR: User does not own order');
+      res.status(403).json({ error: 'You can only review products from your own orders' });
       return;
     }
 
     // Check if review already exists for this order and product
+    console.log('Checking for existing review...');
     const existingReview = await Review.findOne({
       product: productId,
       order: orderId
     });
-    console.log('Existing review check:', { productId, orderId, existingReviewExists: !!existingReview });
+    console.log('Existing review check result:', { 
+      productId, 
+      orderId, 
+      existingReviewExists: !!existingReview,
+      existingReviewId: existingReview?._id
+    });
     
     if (existingReview) {
-      console.log('Review already exists for this order:', { productId, orderId });
+      console.log('ERROR: Review already exists for this order');
       res.status(400).json({ error: 'You have already reviewed this product with this order' });
       return;
     }
 
     // Create review
+    console.log('Creating new review...');
     const review = new Review({
       product: productId,
       user: userId,
@@ -175,8 +206,119 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
       review
     });
   } catch (error) {
-    console.error('Error creating review:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('FATAL ERROR creating review:', error);
+    res.status(500).json({ error: 'Internal server error occurred while creating review' });
+  }
+}));
+
+// Create review (verified purchase only) - BULLETPROOF VERSION
+router.post('/bulletproof', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    console.log('=== BULLETPROOF REVIEW SUBMISSION ===');
+    console.log('Full request body:', req.body);
+    console.log('Headers:', req.headers);
+    console.log('User from token:', (req as any).user);
+    
+    const { productId, orderId, rating, title, comment } = req.body;
+    
+    // Basic validation
+    if (!productId || !orderId || !rating || !title || !comment) {
+      console.log('Missing required fields');
+      return res.status(400).json({ 
+        error: 'Missing required fields', 
+        required: ['productId', 'orderId', 'rating', 'title', 'comment'],
+        provided: { productId, orderId, rating, title: !!title, comment: !!comment }
+      });
+    }
+    
+    // Type validation
+    if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+      console.log('Invalid rating');
+      return res.status(400).json({ error: 'Rating must be a number between 1 and 5' });
+    }
+    
+    if (typeof title !== 'string' || title.length < 3 || title.length > 100) {
+      console.log('Invalid title');
+      return res.status(400).json({ error: 'Title must be between 3 and 100 characters' });
+    }
+    
+    if (typeof comment !== 'string' || comment.length < 10 || comment.length > 1000) {
+      console.log('Invalid comment');
+      return res.status(400).json({ error: 'Comment must be between 10 and 1000 characters' });
+    }
+    
+    const userId = (req as any).user?._id;
+    console.log('Processing review for user:', userId);
+    
+    // Verify order exists and is completed
+    console.log('Looking up order:', orderId);
+    const order = await Order.findById(orderId);
+    if (!order) {
+      console.log('Order not found');
+      return res.status(400).json({ error: 'Order not found' });
+    }
+    
+    if (order.paymentStatus !== 'completed') {
+      console.log('Order not completed:', order.paymentStatus);
+      return res.status(400).json({ error: `Order not completed. Status: ${order.paymentStatus}` });
+    }
+    
+    // Verify product is in order
+    console.log('Order items:', order.items);
+    const orderItem = order.items.find(item => 
+      item.product.toString() === productId
+    );
+    
+    if (!orderItem) {
+      console.log('Product not in order');
+      return res.status(400).json({ error: 'Product not found in order' });
+    }
+    
+    // Verify ownership
+    const isOwner = 
+      (userId && order.user && order.user.toString() === userId.toString()) ||
+      (!userId && order.guestEmail && order.guestEmail === req.body.guestEmail);
+    
+    if (!isOwner) {
+      console.log('Not owner of order');
+      return res.status(403).json({ error: 'Not authorized to review this order' });
+    }
+    
+    // Check for duplicate review
+    const existingReview = await Review.findOne({
+      product: productId,
+      order: orderId
+    });
+    
+    if (existingReview) {
+      console.log('Review already exists');
+      return res.status(400).json({ error: 'Review already exists for this order' });
+    }
+    
+    // Create review
+    console.log('Creating review...');
+    const review = new Review({
+      product: productId,
+      user: userId || undefined,
+      order: orderId,
+      guestName: !userId ? order.guestName : undefined,
+      guestEmail: !userId ? order.guestEmail : undefined,
+      rating,
+      title,
+      comment,
+      isVerifiedPurchase: true
+    });
+    
+    const savedReview = await review.save();
+    console.log('Review created successfully:', savedReview._id);
+    
+    res.status(201).json({
+      success: true,
+      review: savedReview
+    });
+  } catch (error) {
+    console.error('FATAL ERROR:', error);
+    res.status(500).json({ error: 'Internal server error', details: (error as Error).message });
   }
 }));
 
