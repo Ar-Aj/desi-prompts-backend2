@@ -70,6 +70,25 @@ router.get('/product/:productId', asyncHandler(async (req: Request, res: Respons
   });
 }));
 
+// Get a specific review by ID
+router.get('/:reviewId', asyncHandler(async (req: Request, res: Response) => {
+  const { reviewId } = req.params;
+
+  const review = await Review.findById(reviewId)
+    .populate('user', 'name')
+    .populate('product', 'name slug images');
+
+  if (!review || !review.isActive) {
+    res.status(404).json({ error: 'Review not found' });
+    return;
+  }
+
+  res.json({
+    success: true,
+    review
+  });
+}));
+
 // Create review (verified purchase only)
 router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async (req: Request, res: Response) => {
   const { productId, orderId, rating, title, comment } = req.body;
