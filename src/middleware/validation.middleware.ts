@@ -4,34 +4,44 @@ import { ZodSchema } from 'zod';
 export const validate = (schema: ZodSchema) => {
   return async (_req: Request, _res: Response, next: NextFunction) => {
     try {
-      console.log('=== VALIDATION DEBUG INFO ===');
-      console.log('Request body for validation:', _req.body);
-      console.log('Schema to validate against:', schema);
-      
-      const result = await schema.parseAsync(_req.body);
-      console.log('Validation successful, result:', result);
+      await schema.parseAsync(_req.body);
       next();
     } catch (error: any) {
-      console.log('=== VALIDATION FAILED ===');
-      console.log('Validation error:', error);
-      console.log('Error details:', {
-        name: error.name,
-        message: error.message,
-        errors: error.errors
-      });
-      
-      // Send a more detailed error response
       if (error.name === 'ZodError') {
-        const errorDetails = error.errors.map((err: any) => ({
-          field: err.path.join('.'),
-          message: err.message,
-          received: err.received,
-          expected: err.expected
-        }));
-        console.log('Detailed validation errors:', errorDetails);
+        // Create user-friendly error messages
+        const errorMessages = error.errors.map((err: any) => {
+          const field = err.path.join('.');
+          const message = err.message;
+          
+          // Custom messages for review validation
+          if (field === 'title') {
+            if (err.code === 'too_small') {
+              return 'Review title must be at least 3 characters long';
+            } else if (err.code === 'too_big') {
+              return 'Review title must be no more than 100 characters long';
+            }
+          } else if (field === 'comment') {
+            if (err.code === 'too_small') {
+              return 'Review comment must be at least 10 characters long';
+            } else if (err.code === 'too_big') {
+              return 'Review comment must be no more than 1000 characters long';
+            }
+          } else if (field === 'rating') {
+            if (err.code === 'too_small') {
+              return 'Rating must be at least 1 star';
+            } else if (err.code === 'too_big') {
+              return 'Rating must be no more than 5 stars';
+            } else if (err.code === 'invalid_type') {
+              return 'Rating must be a number between 1 and 5';
+            }
+          }
+          
+          // Default message
+          return `${field} ${message}`;
+        });
+        
         _res.status(400).json({ 
-          error: 'Validation failed',
-          details: errorDetails
+          error: errorMessages[0] || 'Validation failed'
         });
         return;
       }

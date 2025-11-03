@@ -91,22 +91,32 @@ router.get('/:reviewId', asyncHandler(async (req: Request, res: Response) => {
   });
 }));
 
-// Create review (verified purchase only) - SIMPLIFIED VERSION
+// Create review (verified purchase only) - Enhanced with better error logging
 router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { productId, orderId, rating, title, comment } = req.body;
     const userId = (req as any).user?._id;
-
+    
+    console.log('=== REVIEW SUBMISSION ATTEMPT ===');
+    console.log('Request body:', { productId, orderId, rating, title, comment });
+    console.log('User ID:', userId);
+    
     // Verify order exists and is completed
     const order = await Order.findById(orderId);
+    console.log('Order lookup result:', { 
+      orderId, 
+      orderExists: !!order, 
+      paymentStatus: order?.paymentStatus 
+    });
+    
     if (!order) {
-      res.status(400).json({ error: 'Order not found' });
-      return;
+      console.log('ERROR: Order not found');
+      return res.status(400).json({ error: 'Order not found. Please make sure you have purchased this product.' });
     }
     
     if (order.paymentStatus !== 'completed') {
-      res.status(400).json({ error: 'Order not completed' });
-      return;
+      console.log('ERROR: Order not completed');
+      return res.status(400).json({ error: 'Order not completed. You can only review products from completed orders.' });
     }
 
     // Verify product is in order
@@ -114,9 +124,15 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
       item.product.toString() === productId
     );
     
+    console.log('Product verification:', { 
+      productId, 
+      orderItems: order.items.map(item => item.product.toString()),
+      productFound: !!orderItem
+    });
+    
     if (!orderItem) {
-      res.status(400).json({ error: 'Product not found in order' });
-      return;
+      console.log('ERROR: Product not found in order');
+      return res.status(400).json({ error: 'Product not found in your order. You can only review products you have purchased.' });
     }
 
     // Verify user/guest owns the order
@@ -124,9 +140,17 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
       (userId && order.user && order.user.toString() === userId.toString()) ||
       (!userId && order.guestEmail && order.guestEmail === req.body.guestEmail);
     
+    console.log('Ownership verification:', { 
+      userId, 
+      orderUserId: order.user?.toString(), 
+      orderGuestEmail: order.guestEmail,
+      requestBodyGuestEmail: req.body.guestEmail,
+      isOwner 
+    });
+    
     if (!isOwner) {
-      res.status(403).json({ error: 'Not authorized to review this order' });
-      return;
+      console.log('ERROR: Not authorized to review this order');
+      return res.status(403).json({ error: 'Not authorized to review this order. You can only review products from your own purchases.' });
     }
 
     // Check if review already exists for this order and product
@@ -135,12 +159,19 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
       order: orderId
     });
     
+    console.log('Existing review check:', { 
+      productId, 
+      orderId, 
+      existingReviewExists: !!existingReview 
+    });
+    
     if (existingReview) {
-      res.status(400).json({ error: 'Review already exists for this order' });
-      return;
+      console.log('ERROR: Review already exists');
+      return res.status(400).json({ error: 'You have already reviewed this product with this order.' });
     }
 
     // Create review
+    console.log('Creating review...');
     const review = new Review({
       product: productId,
       user: userId,
@@ -154,6 +185,7 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     });
 
     const savedReview = await review.save();
+    console.log('Review created successfully:', savedReview._id);
 
     res.status(201).json({
       success: true,
@@ -161,8 +193,8 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
     });
     return;
   } catch (error) {
-    console.error('Error creating review:', error);
-    res.status(500).json({ error: 'Failed to create review' });
+    console.error('FATAL ERROR creating review:', error);
+    res.status(500).json({ error: 'Failed to create review. Please try again.' });
     return;
   }
 }));
