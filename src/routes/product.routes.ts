@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import mongoose from 'mongoose';
 import { Product } from '../models/Product.model';
 import { Demo } from '../models/Demo.model';
 import { asyncHandler } from '../middleware/error.middleware';
