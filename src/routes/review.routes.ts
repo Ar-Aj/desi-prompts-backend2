@@ -205,9 +205,11 @@ router.post('/', optionalAuth, validate(createReviewSchema), asyncHandler(async 
       success: true,
       review
     });
+    return;
   } catch (error) {
     console.error('FATAL ERROR creating review:', error);
     res.status(500).json({ error: 'Internal server error occurred while creating review' });
+    return;
   }
 }));
 
@@ -224,27 +226,31 @@ router.post('/bulletproof', optionalAuth, asyncHandler(async (req: Request, res:
     // Basic validation
     if (!productId || !orderId || !rating || !title || !comment) {
       console.log('Missing required fields');
-      return res.status(400).json({ 
+      res.status(400).json({ 
         error: 'Missing required fields', 
         required: ['productId', 'orderId', 'rating', 'title', 'comment'],
         provided: { productId, orderId, rating, title: !!title, comment: !!comment }
       });
+      return;
     }
     
     // Type validation
     if (typeof rating !== 'number' || rating < 1 || rating > 5) {
       console.log('Invalid rating');
-      return res.status(400).json({ error: 'Rating must be a number between 1 and 5' });
+      res.status(400).json({ error: 'Rating must be a number between 1 and 5' });
+      return;
     }
     
     if (typeof title !== 'string' || title.length < 3 || title.length > 100) {
       console.log('Invalid title');
-      return res.status(400).json({ error: 'Title must be between 3 and 100 characters' });
+      res.status(400).json({ error: 'Title must be between 3 and 100 characters' });
+      return;
     }
     
     if (typeof comment !== 'string' || comment.length < 10 || comment.length > 1000) {
       console.log('Invalid comment');
-      return res.status(400).json({ error: 'Comment must be between 10 and 1000 characters' });
+      res.status(400).json({ error: 'Comment must be between 10 and 1000 characters' });
+      return;
     }
     
     const userId = (req as any).user?._id;
@@ -255,12 +261,14 @@ router.post('/bulletproof', optionalAuth, asyncHandler(async (req: Request, res:
     const order = await Order.findById(orderId);
     if (!order) {
       console.log('Order not found');
-      return res.status(400).json({ error: 'Order not found' });
+      res.status(400).json({ error: 'Order not found' });
+      return;
     }
     
     if (order.paymentStatus !== 'completed') {
       console.log('Order not completed:', order.paymentStatus);
-      return res.status(400).json({ error: `Order not completed. Status: ${order.paymentStatus}` });
+      res.status(400).json({ error: `Order not completed. Status: ${order.paymentStatus}` });
+      return;
     }
     
     // Verify product is in order
@@ -271,7 +279,8 @@ router.post('/bulletproof', optionalAuth, asyncHandler(async (req: Request, res:
     
     if (!orderItem) {
       console.log('Product not in order');
-      return res.status(400).json({ error: 'Product not found in order' });
+      res.status(400).json({ error: 'Product not found in order' });
+      return;
     }
     
     // Verify ownership
@@ -281,7 +290,8 @@ router.post('/bulletproof', optionalAuth, asyncHandler(async (req: Request, res:
     
     if (!isOwner) {
       console.log('Not owner of order');
-      return res.status(403).json({ error: 'Not authorized to review this order' });
+      res.status(403).json({ error: 'Not authorized to review this order' });
+      return;
     }
     
     // Check for duplicate review
@@ -292,7 +302,8 @@ router.post('/bulletproof', optionalAuth, asyncHandler(async (req: Request, res:
     
     if (existingReview) {
       console.log('Review already exists');
-      return res.status(400).json({ error: 'Review already exists for this order' });
+      res.status(400).json({ error: 'Review already exists for this order' });
+      return;
     }
     
     // Create review
@@ -316,9 +327,11 @@ router.post('/bulletproof', optionalAuth, asyncHandler(async (req: Request, res:
       success: true,
       review: savedReview
     });
+    return;
   } catch (error) {
     console.error('FATAL ERROR:', error);
     res.status(500).json({ error: 'Internal server error', details: (error as Error).message });
+    return;
   }
 }));
 
