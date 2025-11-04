@@ -114,15 +114,26 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       const height = req.query.height ? parseInt(req.query.height as string) : null;
       const quality = req.query.quality ? parseInt(req.query.quality as string) : 80;
       
-      // Set cache headers for better performance
+      // IMPROVED: Set better cache headers for performance
       if (isImage) {
         // Cache images for 1 year with immutable flag for better caching
         res.set('Cache-Control', 'public, max-age=31536000, immutable');
+        // Add ETag for better cache validation
+        res.set('ETag', `"${s3Response.ETag?.replace(/"/g, '')}-${width || 'auto'}x${height || 'auto'}"`);
       } else {
         // Cache other files for 1 day
         res.set('Cache-Control', 'public, max-age=86400');
+        res.set('ETag', s3Response.ETag || '');
       }
-      res.set('ETag', s3Response.ETag || '');
+      
+      // Check if client has cached version
+      const ifNoneMatch = req.headers['if-none-match'];
+      if (ifNoneMatch && isImage) {
+        const expectedETag = `"${s3Response.ETag?.replace(/"/g, '')}-${width || 'auto'}x${height || 'auto'}"`;
+        if (ifNoneMatch === expectedETag) {
+          return res.status(304).end(); // Not modified
+        }
+      }
       
       if (isImage && (width || height)) {
         // Optimize image
@@ -200,36 +211,24 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       } else if (error.name === 'Forbidden') {
         return res.status(403).json({
           success: false,
-          error: 'Access denied to S3 file - check bucket permissions',
+          error: 'Access denied to S3 file',
           details: error.message,
-          key: processedKey,
-          bucket: env.s3.bucketName
-        });
-      } else if (error.name === 'NoSuchBucket') {
-        return res.status(404).json({
-          success: false,
-          error: 'S3 bucket not found - check bucket name and region',
-          details: error.message,
-          bucket: env.s3.bucketName,
-          region: env.s3.region
+          key: processedKey
         });
       } else {
         return res.status(500).json({
           success: false,
-          error: 'Failed to proxy S3 file - internal server error',
+          error: 'Failed to retrieve file from S3',
           details: error.message,
-          key: processedKey,
-          bucket: env.s3.bucketName
+          key: processedKey
         });
       }
     }
   } catch (error) {
-    console.error('S3 Proxy Error:', error);
-    // Ensure we always return a valid JSON response for the proxy endpoint as well
+    console.error('Unexpected error in S3 proxy:', error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to proxy S3 file',
-      message: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : 'Unknown error') : undefined
+      error: 'Internal server error'
     });
   }
 }));
