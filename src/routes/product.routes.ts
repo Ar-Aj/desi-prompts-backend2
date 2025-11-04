@@ -363,13 +363,13 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
 
 // Get all active demos (public) - Must be before /:slug route
 router.get('/demos', asyncHandler(async (req: Request, res: Response) => {
-  const { search, category } = req.query;
+  const { search, category, product } = req.query;
   
   // Build query for filtering
   const query: any = { isActive: true };
   
-  // If we need to filter by search or category, we need to join with products
-  if (search || category) {
+  // If we need to filter by search, category, or specific product, we need to join with products
+  if (search || category || product) {
     // First get products that match our criteria
     const productQuery: any = { isActive: true };
     
@@ -382,6 +382,11 @@ router.get('/demos', asyncHandler(async (req: Request, res: Response) => {
         { name: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } }
       ];
+    }
+    
+    // If filtering by specific product ID
+    if (product) {
+      productQuery._id = product;
     }
     
     const matchingProducts = await Product.find(productQuery).select('_id');
@@ -398,6 +403,57 @@ router.get('/demos', asyncHandler(async (req: Request, res: Response) => {
   res.json({
     success: true,
     demos
+  });
+}));
+
+// Get products that have demos (for filtering UI)
+router.get('/demos/products', asyncHandler(async (req: Request, res: Response) => {
+  const { category } = req.query;
+  
+  // First get products that match category filter
+  const productQuery: any = { isActive: true };
+  
+  if (category) {
+    productQuery.category = category;
+  }
+  
+  // Get products that have demos
+  const productsWithDemos = await Product.aggregate([
+    {
+      $lookup: {
+        from: 'demos',
+        localField: '_id',
+        foreignField: 'product',
+        as: 'demos'
+      }
+    },
+    {
+      $match: {
+        ...productQuery,
+        'demos.isActive': true,
+        'demos.0': { $exists: true } // Only products that have at least one demo
+      }
+    },
+    {
+      $addFields: {
+        demoCount: { $size: '$demos' }
+      }
+    },
+    {
+      $sort: { name: 1 }
+    },
+    {
+      $project: {
+        name: 1,
+        category: 1,
+        demoCount: 1
+      }
+    }
+  ]);
+
+  res.json({
+    success: true,
+    products: productsWithDemos
   });
 }));
 
