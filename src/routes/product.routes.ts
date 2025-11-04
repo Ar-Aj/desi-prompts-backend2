@@ -6,6 +6,7 @@ import { authenticate, authorizeAdmin } from '../middleware/auth.middleware';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../utils/storage.utils';
 import { env } from '../config/environment.config';
+import sharp from 'sharp';
 
 const router: Router = Router();
 
@@ -52,7 +53,7 @@ router.get('/test-json', (_req: Request, res: Response) => {
   });
 });
 
-// Proxy endpoint to serve S3 files directly (to avoid CORS issues)
+// Proxy endpoint to serve S3 files directly (to avoid CORS issues) with optimization
 router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) => {
   try {
     const fullKey = req.params.key + (req.params[0] || '');
@@ -104,7 +105,57 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
         });
       }
       
-      // Set the appropriate headers
+      // Check if it's an image and optimize if needed
+      const contentType = s3Response.ContentType || '';
+      const isImage = contentType.startsWith('image/');
+      
+      // Get image dimensions from query parameters or use defaults
+      const width = req.query.width ? parseInt(req.query.width as string) : null;
+      const height = req.query.height ? parseInt(req.query.height as string) : null;
+      const quality = req.query.quality ? parseInt(req.query.quality as string) : 80;
+      
+      // Set cache headers for better performance
+      if (isImage) {
+        // Cache images for 1 year
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        // Cache other files for 1 day
+        res.set('Cache-Control', 'public, max-age=86400');
+      }
+      res.set('ETag', s3Response.ETag || '');
+      
+      if (isImage && (width || height)) {
+        // Optimize image
+        try {
+          const imageBuffer = await streamToBuffer(s3Response.Body as NodeJS.ReadableStream);
+          
+          let sharpInstance = sharp(imageBuffer);
+          
+          // Resize if dimensions are provided
+          if (width || height) {
+            sharpInstance = sharpInstance.resize(width, height, {
+              fit: 'inside',
+              withoutEnlargement: true
+            });
+          }
+          
+          // Convert to WebP for better compression
+          sharpInstance = sharpInstance.webp({ quality });
+          
+          const optimizedBuffer = await sharpInstance.toBuffer();
+          
+          // Set appropriate headers
+          res.set('Content-Type', 'image/webp');
+          res.set('Content-Length', optimizedBuffer.length.toString());
+          
+          return res.send(optimizedBuffer);
+        } catch (optimizeError) {
+          console.error('Error optimizing image:', optimizeError);
+          // Fall back to original image
+        }
+      }
+      
+      // Set the appropriate headers for original file
       if (s3Response.ContentType) {
         res.set('Content-Type', s3Response.ContentType);
       }
@@ -178,6 +229,16 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
     });
   }
 }));
+
+// Helper function to convert stream to buffer
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    stream.on('error', (err) => reject(err));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
 
 // Test endpoint to check PDF content
 router.get('/test-pdf-content', asyncHandler(async (req: Request, res: Response) => {
