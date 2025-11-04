@@ -518,15 +518,46 @@ router.get('/:slug', asyncHandler(async (req: Request, res: Response) => {
     }
   ]);
 
+  // Check if product has demos
+  const demoCount = await Demo.countDocuments({
+    product: product._id,
+    isActive: true
+  });
+
   // Convert to plain object for response
   const processedProduct = {
     ...product.toObject(),
-    realPurchaseCount: purchaseData[0] ? purchaseData[0].realPurchaseCount : 0
+    realPurchaseCount: purchaseData[0] ? purchaseData[0].realPurchaseCount : 0,
+    hasDemos: demoCount > 0
   };
 
   res.json({
     success: true,
     product: processedProduct
+  });
+}));
+
+// Check if a product has demos
+router.get('/:slug/has-demos', asyncHandler(async (req: Request, res: Response) => {
+  const product = await Product.findOne({ 
+    slug: req.params.slug,
+    isActive: true 
+  }).select('_id');
+
+  if (!product) {
+    res.status(404).json({ error: 'Product not found' });
+    return;
+  }
+
+  const demoCount = await Demo.countDocuments({
+    product: product._id,
+    isActive: true
+  });
+
+  res.json({
+    success: true,
+    hasDemos: demoCount > 0,
+    demoCount
   });
 }));
 
