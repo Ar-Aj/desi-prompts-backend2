@@ -362,8 +362,36 @@ router.get('/', asyncHandler(async (_req: Request, res: Response) => {
 }));
 
 // Get all active demos (public) - Must be before /:slug route
-router.get('/demos', asyncHandler(async (_req: Request, res: Response) => {
-  const demos = await Demo.find({ isActive: true })
+router.get('/demos', asyncHandler(async (req: Request, res: Response) => {
+  const { search, category } = req.query;
+  
+  // Build query for filtering
+  const query: any = { isActive: true };
+  
+  // If we need to filter by search or category, we need to join with products
+  if (search || category) {
+    // First get products that match our criteria
+    const productQuery: any = { isActive: true };
+    
+    if (category) {
+      productQuery.category = category;
+    }
+    
+    if (search) {
+      productQuery.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const matchingProducts = await Product.find(productQuery).select('_id');
+    const productIds = matchingProducts.map(p => p._id);
+    
+    // Add product filter to demo query
+    query.product = { $in: productIds };
+  }
+  
+  const demos = await Demo.find(query)
     .populate('product', 'name category price slug images description')
     .sort({ order: 1, createdAt: -1 });
 
