@@ -116,7 +116,7 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       
       // Set cache headers for better performance
       if (isImage) {
-        // Cache images for 1 year
+        // Cache images for 1 year with immutable flag for better caching
         res.set('Cache-Control', 'public, max-age=31536000, immutable');
       } else {
         // Cache other files for 1 day
@@ -163,7 +163,11 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
         res.set('Content-Length', s3Response.ContentLength.toString());
       }
       if (s3Response.CacheControl) {
-        res.set('Cache-Control', s3Response.CacheControl);
+        // Use the cache control from S3 if it exists, otherwise set our own
+        res.set('Cache-Control', s3Response.CacheControl || 'public, max-age=31536000');
+      } else {
+        // Default cache control if none exists
+        res.set('Cache-Control', 'public, max-age=31536000');
       }
       if (s3Response.ETag) {
         res.set('ETag', s3Response.ETag);
