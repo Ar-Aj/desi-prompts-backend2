@@ -1296,65 +1296,148 @@ router.patch('/demos/:demoId/toggle', asyncHandler(async (req: Request, res: Res
 }));
 
 // Get customer analytics
-router.get('/customers/analytics', asyncHandler(async (_req: Request, _res: Response) => {
-  const [
-    totalCustomers,
-    newCustomers,
-    activeCustomers,
-    customerSpending,
-    topCustomers
-  ] = await Promise.all([
-    User.countDocuments({ role: 'customer' }),
-    User.countDocuments({ 
-      role: 'customer',
-      createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } // Last 30 days
-    }),
-    Order.distinct('user', { 
-      paymentStatus: 'completed',
-      createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } // Last 90 days
-    }).then(userIds => userIds.length),
-    Order.aggregate([
-      { $match: { paymentStatus: 'completed' } },
-      {
-        $group: {
-          _id: '$user',
-          totalSpent: { $sum: '$totalAmount' },
-          orderCount: { $sum: 1 }
-        }
-      },
-      { $sort: { totalSpent: -1 } },
-      { $limit: 10 }
-    ]).then(async (results) => {
-      const enriched = await Promise.all(
-        results.map(async (result: any) => {
-          if (result._id) {
-            const user = await User.findById(result._id).select('name email');
-            return {
-              ...result,
-              user: user ? { name: user.name, email: user.email } : null
-            };
-          }
-          return result;
-        })
-      );
-      return enriched.filter((item: any) => item.user !== null);
-    }),
-    User.find({ role: 'customer' })
-      .sort({ totalSpent: -1 })
-      .limit(10)
-      .select('name email totalSpent')
-  ]);
-
-  _res.json({
-    success: true,
-    analytics: {
+router.get('/customers/analytics', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    // Get query parameters for pagination/filtering
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+    
+    // Calculate date ranges for analytics
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    
+    // Execute all analytics queries in parallel
+    const [
       totalCustomers,
       newCustomers,
       activeCustomers,
       customerSpending,
-      topCustomers
-    }
-  });
+      customers
+    ] = await Promise.all([
+      // Total customers
+      User.countDocuments({ role: 'customer' }),
+      
+      // New customers (last 30 days)
+      User.countDocuments({ 
+        role: 'customer',
+        createdAt: { $gte: thirtyDaysAgo }
+      }),
+      
+      // Active customers (ordered in last 90 days)
+      Order.distinct('user', { 
+        paymentStatus: 'completed',
+        createdAt: { $gte: ninetyDaysAgo },
+        user: { $ne: null }
+      }).then(userIds => userIds.length),
+      
+      // Customer spending analysis
+      Order.aggregate([
+        { $match: { paymentStatus: 'completed', user: { $ne: null } } },
+        {
+          $group: {
+            _id: '$user',
+            totalSpent: { $sum: '$totalAmount' },
+            orderCount: { $sum: 1 },
+            firstOrderDate: { $min: '$createdAt' },
+            lastOrderDate: { $max: '$createdAt' }
+          }
+        },
+        { $sort: { totalSpent: -1 } },
+        { $limit: 10 }
+      ]).then(async (results) => {
+        const enriched = await Promise.all(
+          results.map(async (result: any) => {
+            if (result._id) {
+              const user = await User.findById(result._id).select('name email');
+              return {
+                ...result,
+                user: user ? { name: user.name, email: user.email } : null
+              };
+            }
+            return result;
+          })
+        );
+        return enriched.filter((item: any) => item.user !== null);
+      }),
+      
+      // Get paginated customer list with order/review data
+      User.find({ role: 'customer' })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .then(async (users) => {
+          // Enrich users with order and review data
+          return Promise.all(users.map(async (user: any) => {
+            const [orderStats, reviewCount] = await Promise.all([
+              Order.aggregate([
+                { $match: { user: user._id, paymentStatus: 'completed' } },
+                {
+                  $group: {
+                    _id: null,
+                    totalSpent: { $sum: '$totalAmount' },
+                    orderCount: { $sum: 1 },
+                    firstOrderDate: { $min: '$createdAt' },
+                    lastOrderDate: { $max: '$createdAt' }
+                  }
+                }
+              ]),
+              Review.countDocuments({ user: user._id, isActive: true })
+            ]);
+            
+            const stats = orderStats[0] || { 
+              totalSpent: 0, 
+              orderCount: 0, 
+              firstOrderDate: null, 
+              lastOrderDate: null 
+            };
+            
+            return {
+              ...user,
+              totalOrders: stats.orderCount,
+              totalSpent: stats.totalSpent,
+              averageOrderValue: stats.orderCount > 0 ? stats.totalSpent / stats.orderCount : 0,
+              firstPurchaseDate: stats.firstOrderDate,
+              lastPurchaseDate: stats.lastOrderDate,
+              reviewCount
+            };
+          }));
+        })
+    ]);
+    
+    // Calculate additional stats
+    const totalRevenue = customerSpending.reduce((sum: number, customer: any) => sum + (customer.totalSpent || 0), 0);
+    const averageOrderValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
+    const repeatCustomers = customers.filter((customer: any) => customer.totalOrders > 1).length;
+    
+    const stats = {
+      totalCustomers,
+      newCustomers,
+      activeCustomers,
+      averageOrderValue,
+      totalRevenue,
+      repeatCustomers
+    };
+    
+    res.json({
+      success: true,
+      stats,
+      customers,
+      pagination: {
+        page,
+        limit,
+        total: totalCustomers,
+        pages: Math.ceil(totalCustomers / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching customer analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch customer analytics'
+    });
+  }
 }));
 
 export default router;

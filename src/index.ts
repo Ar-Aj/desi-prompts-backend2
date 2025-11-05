@@ -11,11 +11,14 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configure CORS with specific origins
+// Configure CORS with specific origins and additional options
 const corsOptions = {
   origin: env.corsOrigins,
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 };
 
 // Add a test route BEFORE all other middleware
