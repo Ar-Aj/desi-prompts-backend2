@@ -1,10 +1,10 @@
 services:
   - type: web
     name: desi-prompts-backend
-    env: node
+    runtime: node
+    plan: starter
     buildCommand: npm install && npm run build
     startCommand: npm start
-    nodeVersion: 18
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,12 +19,13 @@ services:
       - key: RAZORPAY_WEBHOOK_SECRET
         value: dcbd25aa93a65c25be360b7e9f118a1e
 
-jobs:
   - type: cron
     name: cache-prewarm-5min
-    schedule: "*/5 * * * *"  # Every 5 minutes
+    runtime: node
+    plan: starter
     buildCommand: npm install && npm run build
     startCommand: npm run prewarm-cache
+    schedule: "*/5 * * * *"
     envVars:
       - key: NODE_ENV
         value: production
