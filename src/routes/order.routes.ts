@@ -213,8 +213,9 @@ router.post('/verify-payment', optionalAuth, asyncHandler(async (req: Request, r
       order_id // Handle different naming conventions
     } = req.body;
     
-    // Use the first available order ID parameter
-    const searchOrderId = razorpayOrderId || orderId || order_id;
+    // Use the database order ID first, then fall back to other parameters
+    // The database order ID is what we need to find the order in our system
+    const searchOrderId = orderId || order_id || razorpayOrderId;
 
     console.log('📄 EXTRACTED PARAMETERS:', {
       razorpayOrderId,
