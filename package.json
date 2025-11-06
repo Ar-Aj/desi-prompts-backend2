@@ -9,6 +9,7 @@
     "build": "tsc",
     "test": "jest",
     "prewarm-cache": "node dist/scripts/prewarm-cache.js",
+    "monitor-cache": "node dist/scripts/monitor-cache.js",
     "diagnose-images": "node dist/scripts/diagnose-images.js"
   },
   "dependencies": {

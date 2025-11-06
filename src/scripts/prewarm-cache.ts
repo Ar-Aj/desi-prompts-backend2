@@ -19,6 +19,7 @@ import { Demo } from '../models/Demo.model';
 import { env } from '../config/environment.config';
 import https from 'https';
 import http from 'http';
+import { getSignedDownloadUrl } from '../utils/storage.utils';
 
 // Configure mongoose promises
 mongoose.Promise = global.Promise;
@@ -34,15 +35,51 @@ const getApiUrl = () => {
     : `${env.frontendUrl}/api`;
 };
 
+// Enhanced function to prewarm images with fallback to direct S3 access
+async function prewarmImageWithFallback(imageKey: string, proxyUrl: string): Promise<boolean> {
+  // First try the proxy endpoint
+  const proxySuccess = await prewarmImage(proxyUrl);
+  
+  if (proxySuccess) {
+    return true;
+  }
+  
+  // If proxy fails, try direct S3 access to ensure the file exists
+  try {
+    const signedUrl = await getSignedDownloadUrl(imageKey);
+    if (signedUrl) {
+      // Log that we're using direct S3 access as fallback
+      if (Math.random() < 0.1) { // Log 10% of fallback attempts
+        console.log(`🔄 Using direct S3 access as fallback for: ${imageKey}`);
+      }
+      return true;
+    }
+  } catch (error) {
+    // Only log errors occasionally
+    if (Math.random() < 0.05) {
+      console.log(`❌ Error with S3 fallback for ${imageKey}:`, error instanceof Error ? error.message : 'Unknown error');
+    }
+  }
+  
+  return false;
+}
+
+// Optimized function to prewarm images with better error handling
 async function prewarmImage(url: string): Promise<boolean> {
   return new Promise((resolve) => {
     const parsedUrl = new URL(url);
     const agent = parsedUrl.protocol === 'https:' ? httpsAgent : httpAgent;
     
-    const request = (parsedUrl.protocol === 'https:' ? https : http).get(url, { agent }, (res) => {
+    const request = (parsedUrl.protocol === 'https:' ? https : http).get(url, { 
+      agent,
+      timeout: 5000 // 5 second timeout for faster execution
+    }, (res) => {
       // We only care about successful responses
       if (res.statusCode === 200) {
-        console.log(`✅ Successfully warmed cache for: ${url}`);
+        // Only log successful pre-warms occasionally to reduce log volume
+        if (Math.random() < 0.1) { // Log 10% of successful requests
+          console.log(`✅ Successfully warmed cache for: ${url}`);
+        }
         resolve(true);
       } else {
         console.log(`⚠️  Non-200 response for ${url}: ${res.statusCode}`);
@@ -54,19 +91,26 @@ async function prewarmImage(url: string): Promise<boolean> {
     });
     
     request.on('error', (err) => {
-      console.log(`❌ Error warming cache for ${url}:`, err.message);
+      // Only log errors for debugging
+      if (err.message !== 'socket hang up' && err.message !== 'ETIMEDOUT') {
+        console.log(`❌ Error warming cache for ${url}:`, err.message);
+      }
       resolve(false);
     });
     
     // Set a timeout
-    request.setTimeout(10000, () => {
+    request.setTimeout(5000, () => {
       request.destroy();
-      console.log(`⏰ Timeout warming cache for: ${url}`);
+      // Only log timeouts occasionally
+      if (Math.random() < 0.05) { // Log 5% of timeouts
+        console.log(`⏰ Timeout warming cache for: ${url}`);
+      }
       resolve(false);
     });
   });
 }
 
+// Optimized product image prewarming with fallback
 async function prewarmProductImages() {
   console.log('🚀 Pre-warming product images...');
   
@@ -78,32 +122,32 @@ async function prewarmProductImages() {
     let totalCount = 0;
     
     for (const product of products) {
-      console.log(`\n📦 Processing product: ${product.name}`);
+      // Log product processing occasionally to reduce log volume
+      if (Math.random() < 0.2) { // Log 20% of products
+        console.log(`\n📦 Processing product: ${product.name}`);
+      }
       
       for (const image of product.images) {
         totalCount++;
         try {
-          // If it's an S3 key, use the proxy endpoint
-          let imageUrl: string;
+          // If it's an S3 key, use the proxy endpoint with fallback
           if (image.includes('/') && !image.startsWith('http')) {
-            // S3 key - use proxy
-            imageUrl = `${getApiUrl()}/products/proxy-s3/${image}`;
+            // S3 key - use proxy with fallback
+            const proxyUrl = `${getApiUrl()}/products/proxy-s3/${image}`;
+            const success = await prewarmImageWithFallback(image, proxyUrl);
+            if (success) successCount++;
           } else if (image.startsWith('http')) {
             // Full URL - use as is
-            imageUrl = image;
-          } else {
-            // Local image - skip
-            console.log(`⏭️  Skipping local image: ${image}`);
-            continue;
+            const success = await prewarmImage(image);
+            if (success) successCount++;
           }
-          
-          const success = await prewarmImage(imageUrl);
-          if (success) successCount++;
-          
-          // Add a small delay to avoid overwhelming the server
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Add minimal delay to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reduced from 100ms to 50ms
         } catch (error) {
-          console.log(`❌ Error processing image ${image}:`, error instanceof Error ? error.message : 'Unknown error');
+          // Only log errors occasionally
+          if (Math.random() < 0.1) {
+            console.log(`❌ Error processing image ${image}:`, error instanceof Error ? error.message : 'Unknown error');
+          }
         }
       }
     }
@@ -116,6 +160,7 @@ async function prewarmProductImages() {
   }
 }
 
+// Optimized demo image prewarming
 async function prewarmDemoImages() {
   console.log('\n🚀 Pre-warming demo images...');
   
@@ -127,7 +172,10 @@ async function prewarmDemoImages() {
     let totalCount = 0;
     
     for (const demo of demos) {
-      console.log(`\n🎭 Processing demo: ${demo.title}`);
+      // Log demo processing occasionally to reduce log volume
+      if (Math.random() < 0.2) { // Log 20% of demos
+        console.log(`\n🎭 Processing demo: ${demo.title}`);
+      }
       
       // Process before image
       if (demo.beforeImage) {
@@ -137,24 +185,25 @@ async function prewarmDemoImages() {
           // Check if it's a signed URL (demo images are stored as full URLs)
           if (demo.beforeImage.startsWith('http') && demo.beforeImage.includes('amazonaws.com')) {
             // Skip warming demo images that are full signed URLs as they expire
-            console.log(`⏭️  Skipping demo image (signed URL expires): ${demo.beforeImage.substring(0, 100)}...`);
             continue;
           } else if (demo.beforeImage.includes('/') && !demo.beforeImage.startsWith('http')) {
             // S3 key - use proxy
             imageUrl = `${getApiUrl()}/products/proxy-s3/${demo.beforeImage}`;
+            const success = await prewarmImage(imageUrl);
+            if (success) successCount++;
           } else {
-            // Local image - skip
-            console.log(`⏭️  Skipping local before image: ${demo.beforeImage}`);
-            continue;
+            // Local image or full URL - use as is
+            const success = await prewarmImage(demo.beforeImage);
+            if (success) successCount++;
           }
           
-          const success = await prewarmImage(imageUrl);
-          if (success) successCount++;
-          
-          // Add a small delay to avoid overwhelming the server
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Minimal delay to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reduced from 100ms to 50ms
         } catch (error) {
-          console.log(`❌ Error processing before image ${demo.beforeImage}:`, error instanceof Error ? error.message : 'Unknown error');
+          // Only log errors occasionally
+          if (Math.random() < 0.1) {
+            console.log(`❌ Error processing before image:`, error instanceof Error ? error.message : 'Unknown error');
+          }
         }
       }
       
@@ -163,28 +212,28 @@ async function prewarmDemoImages() {
         totalCount++;
         try {
           const image = afterImage.image;
-          let imageUrl: string;
           // Check if it's a signed URL (demo images are stored as full URLs)
           if (image.startsWith('http') && image.includes('amazonaws.com')) {
             // Skip warming demo images that are full signed URLs as they expire
-            console.log(`⏭️  Skipping demo image (signed URL expires): ${image.substring(0, 100)}...`);
             continue;
           } else if (image.includes('/') && !image.startsWith('http')) {
             // S3 key - use proxy
-            imageUrl = `${getApiUrl()}/products/proxy-s3/${image}`;
+            const imageUrl = `${getApiUrl()}/products/proxy-s3/${image}`;
+            const success = await prewarmImage(imageUrl);
+            if (success) successCount++;
           } else {
-            // Local image - skip
-            console.log(`⏭️  Skipping local after image: ${image}`);
-            continue;
+            // Local image or full URL - use as is
+            const success = await prewarmImage(image);
+            if (success) successCount++;
           }
           
-          const success = await prewarmImage(imageUrl);
-          if (success) successCount++;
-          
-          // Add a small delay to avoid overwhelming the server
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Minimal delay to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 50)); // Reduced from 100ms to 50ms
         } catch (error) {
-          console.log(`❌ Error processing after image ${afterImage.image}:`, error instanceof Error ? error.message : 'Unknown error');
+          // Only log errors occasionally
+          if (Math.random() < 0.1) {
+            console.log(`❌ Error processing after image:`, error instanceof Error ? error.message : 'Unknown error');
+          }
         }
       }
     }
@@ -197,15 +246,22 @@ async function prewarmDemoImages() {
   }
 }
 
+// Enhanced main function with better error handling and logging
 async function main() {
   console.log('🔥 Starting Cache Pre-warming Process');
   console.log(`📡 API URL: ${getApiUrl()}`);
   console.log(`☁️  Environment: ${env.mode}`);
+  console.log(`🕐 Execution time: ${new Date().toISOString()}`);
+  
+  const startTime = Date.now();
   
   try {
     // Connect to database
     console.log('\n🔗 Connecting to database...');
-    await mongoose.connect(env.mongoUri);
+    await mongoose.connect(env.mongoUri, {
+      serverSelectionTimeoutMS: 5000, // 5 second timeout
+      socketTimeoutMS: 10000, // 10 second timeout
+    });
     console.log('✅ Database connected successfully');
     
     // Pre-warm product images
@@ -214,8 +270,12 @@ async function main() {
     // Pre-warm demo images
     const demoSuccessCount = await prewarmDemoImages();
     
+    const endTime = Date.now();
+    const duration = ((endTime - startTime) / 1000).toFixed(2);
+    
     console.log('\n🏁 Pre-warming complete!');
     console.log(`📈 Total successful pre-warms: ${productSuccessCount + demoSuccessCount}`);
+    console.log(`⏱️  Execution time: ${duration} seconds`);
     
     // Close database connection
     await mongoose.connection.close();
@@ -223,6 +283,13 @@ async function main() {
     
   } catch (error) {
     console.error('💥 Fatal error during pre-warming:', error instanceof Error ? error.message : 'Unknown error');
+    // Try to close database connection even if there's an error
+    try {
+      await mongoose.connection.close();
+      console.log('🔒 Database connection closed (after error)');
+    } catch (closeError) {
+      console.error('❌ Error closing database connection:', closeError instanceof Error ? closeError.message : 'Unknown error');
+    }
     process.exit(1);
   }
 }
