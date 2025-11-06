@@ -1,0 +1,235 @@
+#!/usr/bin/env node
+
+/**
+ * Cache Pre-warming Script
+ * 
+ * This script pre-warms the S3 proxy cache by hitting all product and demo images.
+ * Run this script periodically to ensure images are cached and load quickly.
+ * 
+ * Usage:
+ *   npm run prewarm-cache
+ * 
+ * Or directly:
+ *   node dist/scripts/prewarm-cache.js
+ */
+
+import mongoose from 'mongoose';
+import { Product } from '../models/Product.model';
+import { Demo } from '../models/Demo.model';
+import { env } from '../config/environment.config';
+import https from 'https';
+import http from 'http';
+
+// Configure mongoose promises
+mongoose.Promise = global.Promise;
+
+// Create an agent with keep-alive connections
+const httpAgent = new http.Agent({ keepAlive: true });
+const httpsAgent = new https.Agent({ keepAlive: true });
+
+// Construct API URL from frontend URL
+const getApiUrl = () => {
+  return env.frontendUrl.includes('localhost') 
+    ? 'http://localhost:5000/api' 
+    : `${env.frontendUrl}/api`;
+};
+
+async function prewarmImage(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const parsedUrl = new URL(url);
+    const agent = parsedUrl.protocol === 'https:' ? httpsAgent : httpAgent;
+    
+    const request = (parsedUrl.protocol === 'https:' ? https : http).get(url, { agent }, (res) => {
+      // We only care about successful responses
+      if (res.statusCode === 200) {
+        console.log(`✅ Successfully warmed cache for: ${url}`);
+        resolve(true);
+      } else {
+        console.log(`⚠️  Non-200 response for ${url}: ${res.statusCode}`);
+        resolve(false);
+      }
+      
+      // Consume response data to free up memory
+      res.resume();
+    });
+    
+    request.on('error', (err) => {
+      console.log(`❌ Error warming cache for ${url}:`, err.message);
+      resolve(false);
+    });
+    
+    // Set a timeout
+    request.setTimeout(10000, () => {
+      request.destroy();
+      console.log(`⏰ Timeout warming cache for: ${url}`);
+      resolve(false);
+    });
+  });
+}
+
+async function prewarmProductImages() {
+  console.log('🚀 Pre-warming product images...');
+  
+  try {
+    const products = await Product.find({ isActive: true }).select('images name');
+    console.log(`Found ${products.length} active products`);
+    
+    let successCount = 0;
+    let totalCount = 0;
+    
+    for (const product of products) {
+      console.log(`\n📦 Processing product: ${product.name}`);
+      
+      for (const image of product.images) {
+        totalCount++;
+        try {
+          // If it's an S3 key, use the proxy endpoint
+          let imageUrl: string;
+          if (image.includes('/') && !image.startsWith('http')) {
+            // S3 key - use proxy
+            imageUrl = `${getApiUrl()}/products/proxy-s3/${image}`;
+          } else if (image.startsWith('http')) {
+            // Full URL - use as is
+            imageUrl = image;
+          } else {
+            // Local image - skip
+            console.log(`⏭️  Skipping local image: ${image}`);
+            continue;
+          }
+          
+          const success = await prewarmImage(imageUrl);
+          if (success) successCount++;
+          
+          // Add a small delay to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.log(`❌ Error processing image ${image}:`, error instanceof Error ? error.message : 'Unknown error');
+        }
+      }
+    }
+    
+    console.log(`\n📊 Product images summary: ${successCount}/${totalCount} images successfully warmed`);
+    return successCount;
+  } catch (error) {
+    console.error('❌ Error pre-warming product images:', error instanceof Error ? error.message : 'Unknown error');
+    return 0;
+  }
+}
+
+async function prewarmDemoImages() {
+  console.log('\n🚀 Pre-warming demo images...');
+  
+  try {
+    const demos = await Demo.find({ isActive: true }).select('beforeImage afterImages title');
+    console.log(`Found ${demos.length} active demos`);
+    
+    let successCount = 0;
+    let totalCount = 0;
+    
+    for (const demo of demos) {
+      console.log(`\n🎭 Processing demo: ${demo.title}`);
+      
+      // Process before image
+      if (demo.beforeImage) {
+        totalCount++;
+        try {
+          let imageUrl: string;
+          // Check if it's a signed URL (demo images are stored as full URLs)
+          if (demo.beforeImage.startsWith('http') && demo.beforeImage.includes('amazonaws.com')) {
+            // Skip warming demo images that are full signed URLs as they expire
+            console.log(`⏭️  Skipping demo image (signed URL expires): ${demo.beforeImage.substring(0, 100)}...`);
+            continue;
+          } else if (demo.beforeImage.includes('/') && !demo.beforeImage.startsWith('http')) {
+            // S3 key - use proxy
+            imageUrl = `${getApiUrl()}/products/proxy-s3/${demo.beforeImage}`;
+          } else {
+            // Local image - skip
+            console.log(`⏭️  Skipping local before image: ${demo.beforeImage}`);
+            continue;
+          }
+          
+          const success = await prewarmImage(imageUrl);
+          if (success) successCount++;
+          
+          // Add a small delay to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.log(`❌ Error processing before image ${demo.beforeImage}:`, error instanceof Error ? error.message : 'Unknown error');
+        }
+      }
+      
+      // Process after images
+      for (const afterImage of demo.afterImages) {
+        totalCount++;
+        try {
+          const image = afterImage.image;
+          let imageUrl: string;
+          // Check if it's a signed URL (demo images are stored as full URLs)
+          if (image.startsWith('http') && image.includes('amazonaws.com')) {
+            // Skip warming demo images that are full signed URLs as they expire
+            console.log(`⏭️  Skipping demo image (signed URL expires): ${image.substring(0, 100)}...`);
+            continue;
+          } else if (image.includes('/') && !image.startsWith('http')) {
+            // S3 key - use proxy
+            imageUrl = `${getApiUrl()}/products/proxy-s3/${image}`;
+          } else {
+            // Local image - skip
+            console.log(`⏭️  Skipping local after image: ${image}`);
+            continue;
+          }
+          
+          const success = await prewarmImage(imageUrl);
+          if (success) successCount++;
+          
+          // Add a small delay to avoid overwhelming the server
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.log(`❌ Error processing after image ${afterImage.image}:`, error instanceof Error ? error.message : 'Unknown error');
+        }
+      }
+    }
+    
+    console.log(`\n📊 Demo images summary: ${successCount}/${totalCount} images successfully warmed`);
+    return successCount;
+  } catch (error) {
+    console.error('❌ Error pre-warming demo images:', error instanceof Error ? error.message : 'Unknown error');
+    return 0;
+  }
+}
+
+async function main() {
+  console.log('🔥 Starting Cache Pre-warming Process');
+  console.log(`📡 API URL: ${getApiUrl()}`);
+  console.log(`☁️  Environment: ${env.mode}`);
+  
+  try {
+    // Connect to database
+    console.log('\n🔗 Connecting to database...');
+    await mongoose.connect(env.mongoUri);
+    console.log('✅ Database connected successfully');
+    
+    // Pre-warm product images
+    const productSuccessCount = await prewarmProductImages();
+    
+    // Pre-warm demo images
+    const demoSuccessCount = await prewarmDemoImages();
+    
+    console.log('\n🏁 Pre-warming complete!');
+    console.log(`📈 Total successful pre-warms: ${productSuccessCount + demoSuccessCount}`);
+    
+    // Close database connection
+    await mongoose.connection.close();
+    console.log('🔒 Database connection closed');
+    
+  } catch (error) {
+    console.error('💥 Fatal error during pre-warming:', error instanceof Error ? error.message : 'Unknown error');
+    process.exit(1);
+  }
+}
+
+// Only run if this script is executed directly
+if (require.main === module) {
+  main().catch(console.error);
+}
+
+export default main;

@@ -53,12 +53,30 @@ router.get('/test-json', (_req: Request, res: Response) => {
   });
 });
 
+// Test endpoint for debugging proxy key processing
+router.get('/proxy-s3-test/:key*', (req: Request, res: Response) => {
+  // @ts-ignore - Handle Express route parameters correctly
+  const fullKey = req.params.key + (req.params[0] || '');
+  res.json({
+    message: 'Proxy key test',
+    fullKey,
+    params: req.params,
+    url: req.url
+  });
+});
+
 // Proxy endpoint to serve S3 files directly (to avoid CORS issues) with optimization
 router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) => {
   try {
+    // @ts-ignore - Handle Express route parameters correctly
     const fullKey = req.params.key + (req.params[0] || '');
     
-    console.log('S3 Proxy Request:', { fullKey, params: req.params, url: req.url });
+    console.log('S3 Proxy Request DEBUG:', { 
+      fullKey, 
+      params: req.params, 
+      url: req.url,
+      originalUrl: req.originalUrl
+    });
     
     if (!fullKey) {
       console.log('Missing key parameter');
@@ -75,6 +93,8 @@ router.get('/proxy-s3/:key*', asyncHandler(async (req: Request, res: Response) =
       processedKey = fullKey.startsWith('/') ? `images${fullKey}` : `images/${fullKey}`;
       console.log('Processed key for file without folder prefix:', { original: fullKey, processed: processedKey });
     }
+    
+    console.log('Final processed key for S3:', { processedKey });
     
     try {
       // Get the object from S3

@@ -7,7 +7,9 @@
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
     "build": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "prewarm-cache": "node dist/scripts/prewarm-cache.js",
+    "diagnose-images": "node dist/scripts/diagnose-images.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.723.0",
