@@ -135,9 +135,12 @@ export const isGoogleOAuthEnabled = (): boolean => {
 
 // Helper to get the correct callback URL based on environment
 export const getGoogleCallbackUrl = (): string => {
-  const baseUrl = env.nodeEnv === 'production' 
-    ? env.frontendUrl.replace(/\/+$/, '') // Remove trailing slashes
-    : 'http://localhost:5000';
+  // For the callback URL, we need to use the backend URL, not the frontend URL
+  // The callback URL is where Google redirects after authentication
+  const backendUrl = process.env.BACKEND_URL || 
+    (env.mode === 'production' 
+      ? 'https://desi-prompts-backend2-3.onrender.com' 
+      : 'http://localhost:5000');
   
-  return `${baseUrl}${env.google.callbackUrl}`;
+  return `${backendUrl}${env.google.callbackUrl}`;
 };

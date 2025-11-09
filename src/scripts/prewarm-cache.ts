@@ -181,14 +181,14 @@ async function prewarmDemoImages() {
       if (demo.beforeImage) {
         totalCount++;
         try {
-          let imageUrl: string;
           // Check if it's a signed URL (demo images are stored as full URLs)
           if (demo.beforeImage.startsWith('http') && demo.beforeImage.includes('amazonaws.com')) {
-            // Skip warming demo images that are full signed URLs as they expire
-            continue;
+            // Demo images are full signed URLs, just hit them directly
+            const success = await prewarmImage(demo.beforeImage);
+            if (success) successCount++;
           } else if (demo.beforeImage.includes('/') && !demo.beforeImage.startsWith('http')) {
             // S3 key - use proxy
-            imageUrl = `${getApiUrl()}/products/proxy-s3/${demo.beforeImage}`;
+            const imageUrl = `${getApiUrl()}/products/proxy-s3/${demo.beforeImage}`;
             const success = await prewarmImage(imageUrl);
             if (success) successCount++;
           } else {
@@ -214,8 +214,9 @@ async function prewarmDemoImages() {
           const image = afterImage.image;
           // Check if it's a signed URL (demo images are stored as full URLs)
           if (image.startsWith('http') && image.includes('amazonaws.com')) {
-            // Skip warming demo images that are full signed URLs as they expire
-            continue;
+            // Demo images are full signed URLs, just hit them directly
+            const success = await prewarmImage(image);
+            if (success) successCount++;
           } else if (image.includes('/') && !image.startsWith('http')) {
             // S3 key - use proxy
             const imageUrl = `${getApiUrl()}/products/proxy-s3/${image}`;
