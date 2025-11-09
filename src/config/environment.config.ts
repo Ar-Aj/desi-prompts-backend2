@@ -142,5 +142,10 @@ export const getGoogleCallbackUrl = (): string => {
       ? 'https://desi-prompts-backend2-3.onrender.com' 
       : 'http://localhost:5000');
   
-  return `${backendUrl}${env.google.callbackUrl}`;
+  // Make sure the callback URL starts with /api if it doesn't already
+  const callbackUrl = env.google.callbackUrl.startsWith('/api') 
+    ? env.google.callbackUrl 
+    : `/api${env.google.callbackUrl}`;
+  
+  return `${backendUrl}${callbackUrl}`;
 };
