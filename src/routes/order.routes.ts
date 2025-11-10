@@ -36,14 +36,20 @@ router.get('/check-discount', optionalAuth, asyncHandler(async (req: Request, re
 // Create order - Use optionalAuth to allow both guest and authenticated users
 router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { items, guestEmail, guestName } = req.body;
+    const { items, guestDetails, guestEmail, guestName } = req.body;
     // Get user ID from authenticated request if available
     const userId = (req as any).user?._id;
 
-    console.log('Order creation request:', { items, guestEmail, guestName, userId });
+    console.log('Order creation request:', { items, guestDetails, guestEmail, guestName, userId });
+
+    // Extract guest details properly - handle both formats
+    const email = guestEmail || (guestDetails?.email);
+    const name = guestName || (guestDetails?.name);
+
+    console.log('Extracted guest details:', { email, name });
 
     // Validate user or guest details
-    if (!userId && (!guestEmail || !guestName)) {
+    if (!userId && (!email || !name)) {
       console.log('Validation failed: Missing guest details or user ID');
       res.status(400).json({ 
         error: 'Please provide guest details or login to continue' 
@@ -130,8 +136,8 @@ router.post('/create', optionalAuth, asyncHandler(async (req: Request, res: Resp
     // Create order
     const order = new Order({
       user: userId, // This will be set if user is authenticated
-      guestEmail: !userId ? guestEmail : undefined, // Only set for guest orders
-      guestName: !userId ? guestName : undefined, // Only set for guest orders
+      guestEmail: !userId ? email : undefined, // Only set for guest orders
+      guestName: !userId ? name : undefined, // Only set for guest orders
       items: orderItems,
       totalAmount,
       // accessToken field removed - direct S3 access used instead
