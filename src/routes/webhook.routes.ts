@@ -113,6 +113,9 @@ router.get('/', (_req: Request, res: Response) => {
 const processedEvents = new Set<string>();
 const EVENT_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
+// Add debugging for processed events
+console.log('Intialized processedEvents set for webhook deduplication');
+
 // Clean up old events periodically
 setInterval(() => {
   // In a real implementation, we would clean up database entries
@@ -147,6 +150,26 @@ router.use('/razorpay', (req, _res, next) => {
     console.log('Skipping raw body capture, method:', req.method, 'content-type:', req.headers['content-type']);
     next();
   }
+});
+
+// Add a debug endpoint to check webhook configuration
+router.get('/razorpay/debug', (_req: Request, res: Response) => {
+  console.log('=== WEBHOOK DEBUG ENDPOINT CALLED ===');
+  const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  const configWebhookSecret = require('../config/environment.config').env.razorpay?.webhookSecret;
+  
+  res.json({ 
+    status: 'ok', 
+    message: 'Webhook debug endpoint',
+    timestamp: new Date().toISOString(),
+    webhookUrl: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/api/webhook/razorpay`,
+    environment: {
+      RAZORPAY_WEBHOOK_SECRET: webhookSecret ? `${webhookSecret.substring(0, 5)}...` : 'NOT SET',
+      CONFIG_WEBHOOK_SECRET: configWebhookSecret ? `${configWebhookSecret.substring(0, 5)}...` : 'NOT SET',
+      secretsMatch: webhookSecret === configWebhookSecret,
+      webhookSecretLength: webhookSecret ? webhookSecret.length : 0
+    }
+  });
 });
 
 // Razorpay webhook endpoint
