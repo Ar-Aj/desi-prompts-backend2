@@ -140,6 +140,7 @@ export const getOrderConfirmationEmail = (
             <p style="color: #cccccc; margin-bottom: 15px;">Click the button below to download your prompt pack:</p>
             <a href="${downloadLink}" class="download-btn">Download Your Prompt Pack</a>
             <p style="font-size: 12px; color: #888; margin-top: 10px;">Direct download link - no login required</p>
+            <p style="font-size: 12px; color: #D4AF37; margin-top: 15px; font-weight: bold;">⚠️ This download link will expire in 15 days</p>
           </div>
           
           <p style="margin-top: 30px;">If you have any questions or issues regarding your purchase, please contact our support team and provide your <strong>Purchase ID: ${purchaseId}</strong> for faster assistance.</p>

@@ -503,10 +503,8 @@ router.post('/:id/resend-email', authenticate, asyncHandler(async (req: Request,
     }
 
     // Generate download link for resend
-    const downloadLink = firstProduct.pdfUrl.startsWith('http') 
-      ? firstProduct.pdfUrl 
-      : `https://s3.eu-north-1.amazonaws.com/desiprompts-prod-files/${firstProduct.pdfUrl}`;
-
+    const downloadLink = await getSignedDownloadUrl(firstProduct.pdfUrl);
+    
     await sendEmail({
       to: customerEmail,
       subject: `Order Confirmation - ${order.orderNumber}`,
@@ -629,7 +627,7 @@ router.get('/:orderId/download/:productId', optionalAuth, asyncHandler(async (re
     success: true,
     downloadUrl,
     password: product.pdfPassword,
-    expiresIn: isProduction ? '30 minutes' : 'permanent'
+    expiresIn: isProduction ? '15 days' : 'permanent'
   });
 }));
 

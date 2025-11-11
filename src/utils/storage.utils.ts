@@ -56,7 +56,7 @@ export const uploadFile = async (
 
 export const getSignedDownloadUrl = async (
   keyOrUrl: string,
-  expiresIn: number = 1800 // 30 minutes default
+  expiresIn: number = 1296000 // 15 days default (60 * 60 * 24 * 15)
 ): Promise<string> => {
   try {
     // If it's already a full URL, check if it's an S3 URL or a local URL
