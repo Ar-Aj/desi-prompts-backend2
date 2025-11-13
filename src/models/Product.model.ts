@@ -7,6 +7,7 @@ export interface IProduct extends Document {
   detailedDescription: string;
   category: string;
   subcategory: 'image' | 'writing'; // New field for subcategories
+  promptCount: number; // New field for prompt count
   price: number;
   originalPrice: number;
   images: string[];
@@ -70,6 +71,11 @@ const productSchema = new Schema<IProduct>(
       type: String,
       enum: ['image', 'writing'],
       required: true
+    },
+    promptCount: {
+      type: Number,
+      default: 0,
+      min: 0
     },
     tags: [{
       type: String,
